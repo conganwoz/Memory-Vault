@@ -52,4 +52,5 @@ export type Screen =
   | 'upload' 
   | 'empty-state' 
   | 'recap'
+  | 'camera'
   | 'profile';

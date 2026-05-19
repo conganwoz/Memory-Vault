@@ -12,6 +12,7 @@ import PhotoViewerScreen from './components/screens/PhotoViewerScreen';
 import UploadScreen from './components/screens/UploadScreen';
 import RecapScreen from './components/screens/RecapScreen';
 import ProfileScreen from './components/screens/ProfileScreen';
+import CameraScreen from './components/screens/CameraScreen';
 
 export default function App() {
   const { user, loading, albums, signIn, signOut } = useFirebase();
@@ -127,6 +128,7 @@ export default function App() {
               onBack={() => setCurrentScreen('home')}
               onInvite={() => setCurrentScreen('invite')}
               onUpload={() => setCurrentScreen('upload')}
+              onCamera={() => setCurrentScreen('camera')}
               onViewPhoto={(photo) => {
                 setViewingPhoto(photo);
                 setCurrentScreen('photo-viewer');
@@ -169,6 +171,16 @@ export default function App() {
             <RecapScreen 
               album={activeAlbum} 
               onBack={() => setCurrentScreen('album-detail')} 
+            />
+          </motion.div>
+        )}
+
+        {currentScreen === 'camera' && activeAlbum && user && (
+          <motion.div key="camera" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
+            <CameraScreen 
+              album={activeAlbum}
+              user={user}
+              onClose={() => setCurrentScreen('album-detail')}
             />
           </motion.div>
         )}

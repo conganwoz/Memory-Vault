@@ -1,0 +1,123 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ---------------------------------------------------------
+    // GLOBAL HELPERS
+    // ---------------------------------------------------------
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ---------------------------------------------------------
+    // ENTITY VALIDATION HELPERS
+    // ---------------------------------------------------------
+
+    function isValidUser(data) {
+      return data.userId == request.auth.uid 
+        && data.email is string && data.email.size() <= 256
+        && data.displayName is string && data.displayName.size() <= 128
+        && data.keys().hasAll(['userId', 'email', 'displayName', 'createdAt'])
+        && data.keys().size() <= 6;
+    }
+
+    function isValidAlbum(data) {
+      return data.ownerId == request.auth.uid 
+        && data.title is string && data.title.size() <= 100
+        && data.members is list && data.members.size() >= 1 && data.members.size() <= 200
+        && data.privacy in ['invite', 'link', 'qr']
+        && data.keys().hasAll(['title', 'ownerId', 'members', 'privacy', 'createdAt', 'photoCount', 'coverPhotoURL'])
+        && data.keys().size() <= 10;
+    }
+
+    function isValidPhoto(data, albumData) {
+      return data.uploaderId == request.auth.uid 
+        && data.url is string && data.url.size() <= 1000
+        && data.type in ['photo', 'video']
+        && request.auth.uid in albumData.members
+        && data.keys().hasAll(['albumId', 'uploaderId', 'uploaderName', 'url', 'type', 'createdAt', 'reactions', 'timestampLabel'])
+        && data.keys().size() <= 10;
+    }
+
+    // ---------------------------------------------------------
+    // MATCH BLOCKS
+    // ---------------------------------------------------------
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow create, update: if isOwner(userId) && isEmailVerified() && isValidUser(incoming());
+      
+      // Prevent PII leak on list
+      allow list: if isSignedIn() && userId == request.auth.uid;
+    }
+
+    // Albums
+    match /albums/{albumId} {
+      allow get: if isSignedIn() && (request.auth.uid in existing().members || existing().privacy != 'invite');
+      allow list: if isSignedIn() && request.auth.uid in existing().members;
+      
+      allow create: if isSignedIn() && isEmailVerified() && isValidId(albumId) && isValidAlbum(incoming());
+      
+      allow update: if isSignedIn() && isEmailVerified() && (
+        // Action: Update Metadata (Owner only)
+        (isOwner(existing().ownerId) && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'coverPhotoURL', 'eventDate', 'privacy'])) ||
+        // Action: Add Member (Member can invite depending on logic, here Owner only for simplicity)
+        (isOwner(existing().ownerId) && incoming().diff(existing()).affectedKeys().hasOnly(['members'])) ||
+        // Action: Update photo count (Members)
+        (request.auth.uid in existing().members && incoming().diff(existing()).affectedKeys().hasOnly(['photoCount']))
+      ) && isValidAlbum(incoming());
+
+      allow delete: if isOwner(existing().ownerId);
+
+      // Photos subcollection
+      match /photos/{photoId} {
+        allow get: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/albums/$(albumId)).data.members;
+        allow list: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/albums/$(albumId)).data.members;
+        
+        allow create: if isSignedIn() && isEmailVerified() && isValidId(photoId) && 
+                      isValidPhoto(incoming(), get(/databases/$(database)/documents/albums/$(albumId)).data);
+        
+        allow update: if isSignedIn() && isEmailVerified() && (
+          // Action: Update reactions (All members)
+          (request.auth.uid in get(/databases/$(database)/documents/albums/$(albumId)).data.members && 
+           incoming().diff(existing()).affectedKeys().hasOnly(['reactions']))
+        ) && isValidPhoto(incoming(), get(/databases/$(database)/documents/albums/$(albumId)).data);
+        
+        allow delete: if isOwner(existing().uploaderId) || isOwner(get(/databases/$(database)/documents/albums/$(albumId)).data.ownerId);
+      }
+
+      // Recaps subcollection
+      match /recaps/{recapId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/albums/$(albumId)).data.members;
+        // Recaps are created by server-side logic typically, but if client writes:
+        allow write: if false; 
+      }
+    }
+  }
+}

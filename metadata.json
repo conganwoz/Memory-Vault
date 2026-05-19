@@ -1,0 +1,6 @@
+{
+  "name": "Kindred",
+  "description": "A collaborative memory album for preserving moments together with those who matter most.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

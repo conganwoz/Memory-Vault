@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "App user profile information.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email"]
+    },
+    "Album": {
+      "title": "Album",
+      "description": "A collaborative photo album.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "coverPhotoURL": { "type": "string" },
+        "eventDate": { "type": "string", "format": "date-time" },
+        "ownerId": { "type": "string" },
+        "members": { "type": "array", "items": { "type": "string" } },
+        "photoCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "privacy": { "type": "string", "enum": ["invite", "link", "qr"] }
+      },
+      "required": ["title", "ownerId", "members"]
+    },
+    "Photo": {
+      "title": "Photo",
+      "description": "A photo or video uploaded to an album.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "albumId": { "type": "string" },
+        "uploaderId": { "type": "string" },
+        "uploaderName": { "type": "string" },
+        "url": { "type": "string" },
+        "caption": { "type": "string" },
+        "type": { "type": "string", "enum": ["photo", "video"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "reactions": { "type": "object" },
+        "timestampLabel": { "type": "string" }
+      },
+      "required": ["albumId", "uploaderId", "url"]
+    },
+    "Recap": {
+      "title": "Recap",
+      "description": "AI-generated memory recap.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "albumId": { "type": "string" },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "photoUrls": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["albumId", "title"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles."
+    },
+    "/albums/{albumId}": {
+      "schema": "Album",
+      "description": "Collaborative albums."
+    },
+    "/albums/{albumId}/photos/{photoId}": {
+      "schema": "Photo",
+      "description": "Photos within an album."
+    },
+    "/albums/{albumId}/recaps/{recapId}": {
+      "schema": "Recap",
+      "description": "Memory recaps for an album."
+    }
+  }
+}

@@ -47,6 +47,14 @@ defmodule KindredWeb.Router do
     # Invites
     post "/invites/:code/accept", InviteController, :accept
 
+    # Invitations (email-based)
+    get "/invitations", InvitationController, :mine
+    get "/albums/:id/invitations", InvitationController, :index
+    post "/albums/:id/invitations", InvitationController, :create
+    post "/invitations/:id/accept", InvitationController, :accept
+    post "/invitations/:id/decline", InvitationController, :decline
+    delete "/invitations/:id", InvitationController, :revoke
+
     # Photos
     get "/albums/:id/photos", PhotoController, :index
     post "/albums/:id/photos", PhotoController, :create

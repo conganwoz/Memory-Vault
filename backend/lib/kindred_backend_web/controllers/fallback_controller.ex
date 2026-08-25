@@ -41,6 +41,36 @@ defmodule KindredWeb.FallbackController do
     |> json(%{errors: %{detail: "No user found with that email."}})
   end
 
+  def call(conn, {:error, :already_member}) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{errors: %{detail: "This person is already a contributor to this album."}})
+  end
+
+  def call(conn, {:error, :cannot_invite_self}) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{errors: %{detail: "You can't invite yourself."}})
+  end
+
+  def call(conn, {:error, :invitation_exists}) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{errors: %{detail: "This person already has a pending invitation to this album."}})
+  end
+
+  def call(conn, {:error, :invitation_not_found}) do
+    conn
+    |> put_status(:not_found)
+    |> json(%{errors: %{detail: "This invitation no longer exists."}})
+  end
+
+  def call(conn, {:error, :invalid_invitation_state}) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{errors: %{detail: "This invitation is no longer pending."}})
+  end
+
   def call(conn, {:error, :invalid_credentials_or_album}) do
     call(conn, {:error, :invalid_credentials})
   end

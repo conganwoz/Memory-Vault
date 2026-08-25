@@ -5,7 +5,7 @@
  * `User` / `Album` / `Photo` / `Recap` types in `lib/types.ts`.
  */
 import { get, post, put, del, apiFormData } from './client';
-import type { Album, Photo, Recap, User } from '../types';
+import type { Album, Invitation, Photo, Recap, User } from '../types';
 
 // ---------------------------------------------------------------------------
 // Auth
@@ -145,24 +145,35 @@ export const recapsApi = {
 };
 
 // ---------------------------------------------------------------------------
-// Invites
+// Invitations (email-based)
 // ---------------------------------------------------------------------------
 
-export interface InviteInfo {
-  code: string;
-  link: string;
-  expiresAt?: string;
-  uses: number;
-}
+export const invitationsApi = {
+  /** Invites a registered user to an album by email (any contributor may). */
+  create: async (albumId: string, email: string) =>
+    (
+      await post<{ invitation: Invitation }>(`/albums/${albumId}/invitations`, {
+        email,
+      })
+    ).invitation,
 
-export const invitesApi = {
-  create: async (albumId: string) =>
-    (await post<{ invite: InviteInfo }>(`/albums/${albumId}/invite`)).invite,
+  /** Pending invitations for an album (members can list and revoke). */
+  listForAlbum: async (albumId: string) =>
+    (await get<{ invitations: Invitation[] }>(`/albums/${albumId}/invitations`)).invitations,
 
-  preview: async (code: string) => get<{ invite: Record<string, unknown> }>(`/invites/${code}`),
+  /** Revokes a still-pending invitation (any contributor may). */
+  revoke: async (id: string) => del<void>(`/invitations/${id}`),
 
-  accept: async (code: string) =>
-    (await post<{ album: Album }>(`/invites/${code}/accept`)).album,
+  /** The caller's own pending invitations. */
+  listMine: async () =>
+    (await get<{ invitations: Invitation[] }>('/invitations')).invitations,
+
+  /** Accepts an invitation — the caller becomes an album contributor. */
+  accept: async (id: string) =>
+    (await post<{ album: Album }>(`/invitations/${id}/accept`)).album,
+
+  /** Declines an invitation — it is removed from the caller's list. */
+  decline: async (id: string) => post<void>(`/invitations/${id}/decline`),
 };
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import {
   Calendar,
   Layers,
   Sparkles,
+  Mail,
 } from 'lucide-react-native';
 import { format } from 'date-fns';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -30,9 +31,11 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import type { RootStackParamList } from '../App';
 import { useFirebase } from '../lib/FirebaseProvider';
+import { invitationsApi } from '../lib/api/endpoints';
 import { resolveAssetUrl } from '../lib/config';
 import { colors, radius } from '../lib/theme';
 import { Avatar, Caption, FloatingNav } from '../lib/ui';
+import type { Invitation } from '../lib/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
@@ -41,11 +44,16 @@ const ON_THIS_DAY_IMAGE =
 
 export default function ProfileScreen({ navigation }: Props) {
   const { user, albums, signOut, refreshAlbums } = useFirebase();
+  const [pendingInvites, setPendingInvites] = useState<Invitation[]>([]);
 
-  // Re-fetch albums whenever the profile screen gains focus.
+  // Re-fetch albums + pending invitations whenever the profile gains focus.
   useFocusEffect(
     useCallback(() => {
       void refreshAlbums();
+      void invitationsApi
+        .listMine()
+        .then(setPendingInvites)
+        .catch((error) => console.warn('Failed to load invitations:', error));
     }, [refreshAlbums])
   );
 
@@ -77,8 +85,15 @@ export default function ProfileScreen({ navigation }: Props) {
   const settingsRows: Array<{
     label: string;
     Icon: typeof Shield;
+    badge?: number;
     onPress?: () => void;
   }> = [
+    {
+      label: 'Invitations',
+      Icon: Mail,
+      badge: pendingInvites.length,
+      onPress: () => navigation.navigate('Invitations'),
+    },
     {
       label: 'Privacy & Security',
       Icon: Shield,
@@ -292,7 +307,14 @@ export default function ProfileScreen({ navigation }: Props) {
                   </View>
                   <Text style={styles.settingsLabel}>{row.label}</Text>
                 </View>
-                <ChevronRight width={16} height={16} color={colors.muted} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  {row.badge != null && row.badge > 0 && (
+                    <View style={styles.settingsBadge}>
+                      <Text style={styles.settingsBadgeText}>{row.badge}</Text>
+                    </View>
+                  )}
+                  <ChevronRight width={16} height={16} color={colors.muted} />
+                </View>
               </TouchableOpacity>
             ))}
           </View>
@@ -567,6 +589,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.charcoal,
+  },
+  settingsBadge: {
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 7,
+    borderRadius: radius.pill,
+    backgroundColor: colors.peach,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsBadgeText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '700',
   },
   signOutButton: {
     flexDirection: 'row',

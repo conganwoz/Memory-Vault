@@ -1,73 +1,104 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Share,
+  Alert,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
-import {
-  ChevronLeft,
-  Copy,
-  Check,
-  Users,
-} from 'lucide-react-native';
+import { ChevronLeft, Mail, RotateCcw, Send, Users } from 'lucide-react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '../App';
 import { useFirebase } from '../lib/FirebaseProvider';
-import { invitesApi } from '../lib/api/endpoints';
+import { invitationsApi } from '../lib/api/endpoints';
 import { colors, radius } from '../lib/theme';
-import { Avatar, Caption } from '../lib/ui';
+import { Avatar, Caption, Spinner } from '../lib/ui';
+import type { Invitation } from '../lib/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Invite'>;
 
 export default function InviteScreen({ route, navigation }: Props) {
   const { albumId } = route.params;
+  const insets = useSafeAreaInsets();
   const { albums } = useFirebase();
   const album = albums.find((a) => a.id === albumId);
 
-  const [copied, setCopied] = useState(false);
-  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
+  const [sending, setSending] = useState(false);
+  const [pending, setPending] = useState<Invitation[]>([]);
+  const [loadingPending, setLoadingPending] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  // Ask the backend for a fresh invite code for this album.
-  useEffect(() => {
-    let cancelled = false;
-    invitesApi
-      .create(albumId)
-      .then((invite) => {
-        if (!cancelled) setInviteCode(invite.code);
-      })
-      .catch((error) => console.warn('Failed to create invite:', error));
-    return () => {
-      cancelled = true;
-    };
+  // Silent refresh on focus (keeps the list mounted — see AlbumDetail notes).
+  const loadPending = useCallback(async () => {
+    try {
+      setPending(await invitationsApi.listForAlbum(albumId));
+    } catch (error) {
+      console.warn('Failed to load pending invitations:', error);
+    } finally {
+      setLoadingPending(false);
+    }
   }, [albumId]);
 
-  const inviteLink = inviteCode
-    ? `https://kindred.app/invite/${inviteCode}`
-    : `https://kindred.app/invite/${albumId ?? ''}`;
+  useFocusEffect(
+    useCallback(() => {
+      void loadPending();
+    }, [loadPending])
+  );
 
-  const handleCopy = async () => {
-    await Clipboard.setStringAsync(inviteLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const sendInvite = async () => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) {
+      setNotice('Enter an email address first.');
+      return;
+    }
+    setSending(true);
+    setNotice(null);
+    try {
+      const invitation = await invitationsApi.create(albumId, trimmed);
+      setEmail('');
+      setNotice(`Invitation sent to ${invitation.inviteeName ?? trimmed}.`);
+      void loadPending();
+    } catch (error) {
+      console.warn('Failed to send invite:', error);
+      setNotice(error instanceof Error ? error.message : 'Could not send the invite.');
+    } finally {
+      setSending(false);
+    }
   };
 
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        title: album ? `Join "${album.title}" on Kindred` : 'Join my Kindred vault',
-        message: `You've been invited to share memories in "${
-          album?.title ?? 'my memory vault'
-        }" on Kindred. Open the app and use this invite code: ${inviteLink}`,
-        url: inviteLink,
-      });
-    } catch {
-      // User cancelled or share unavailable — nothing to do.
-    }
+  const revoke = (invitation: Invitation) => {
+    Alert.alert(
+      'Revoke invitation?',
+      `${invitation.inviteeName ?? 'This person'} will no longer be able to accept it.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Revoke',
+          style: 'destructive',
+          onPress: () =>
+            void (async () => {
+              try {
+                await invitationsApi.revoke(invitation.id);
+                setPending((prev) => prev.filter((i) => i.id !== invitation.id));
+              } catch (error) {
+                console.warn('Failed to revoke invitation:', error);
+                Alert.alert(
+                  'Could not revoke invitation',
+                  error instanceof Error ? error.message : 'Please try again.'
+                );
+              }
+            })(),
+        },
+      ]
+    );
   };
 
   if (!album) {
@@ -81,10 +112,11 @@ export default function InviteScreen({ route, navigation }: Props) {
     );
   }
 
+
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* Header */}
-      <View style={[styles.header, styles.headerSafe]}>
+      <View style={styles.header}>
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={() => navigation.goBack()}
@@ -96,77 +128,134 @@ export default function InviteScreen({ route, navigation }: Props) {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.heroSection}>
-          <View style={styles.qrBadgeWrap}>
-            <View style={styles.qrBadge}>
-              <Text style={styles.qrText}>QR</Text>
-            </View>
-          </View>
-
-          <Text style={styles.headline}>Preserve memories, together.</Text>
-          <Text style={styles.subline}>
-            Let others add their perspective to{' '}
-            <Text style={styles.albumName}>"{album.title}"</Text>
-          </Text>
-
-          <View style={styles.linkRow}>
-            <Copy width={14} height={14} color="rgba(45,45,45,0.4)" />
-            <Text style={styles.linkText} numberOfLines={1}>
-              {inviteLink}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.flex}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Invite by email */}
+          <Caption>Invite by email</Caption>
+          <View style={styles.inviteCard}>
+            <Text style={styles.inviteHeading}>
+              Add a contributor to "{album.title}"
             </Text>
-            <TouchableOpacity hitSlop={8} onPress={handleCopy}>
-              <Text style={styles.copyButton}>
-                {copied ? 'COPIED' : 'COPY'}
+            <Text style={styles.inviteSub}>
+              Enter the email of a Kindred account. They'll see the invitation in
+              their profile and can accept it to join this vault.
+            </Text>
+
+            <View style={styles.inputRow}>
+              <Mail width={18} height={18} color={colors.muted} />
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="friend@example.com"
+                placeholderTextColor="rgba(45,45,45,0.35)"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                style={styles.input}
+                returnKeyType="send"
+                onSubmitEditing={() => void sendInvite()}
+              />
+            </View>
+
+            {notice && <Text style={styles.notice}>{notice}</Text>}
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => void sendInvite()}
+              disabled={sending}
+              style={[styles.sendButton, sending && { opacity: 0.6 }]}
+            >
+              <Send width={14} height={14} color={colors.white} />
+              <Text style={styles.sendButtonText}>
+                {sending ? 'Sending…' : 'Send Invite'}
               </Text>
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={handleShare}
-            style={styles.shareButton}
-          >
-            <Text style={styles.shareButtonText}>Share Invite Link</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Contributors */}
-        <Caption>Current Contributors</Caption>
-        <View style={styles.contributorsRow}>
-          {album.members.slice(0, 8).map((member, i) => (
-            <View key={`${member}-${i}`} style={{ marginLeft: i === 0 ? 0 : -12 }}>
-              <Avatar
-                uri={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member}`}
-                size={44}
-                borderWidth={2}
-              />
-            </View>
-          ))}
-          {album.members.length > 8 && (
-            <View style={styles.overflowBadge}>
-              <Text style={styles.overflowText}>
-                +{album.members.length - 8}
+          {/* Pending invitations */}
+          <View style={styles.section}>
+            <Caption>Pending invitations</Caption>
+            {loadingPending ? (
+              <View style={styles.pendingLoading}>
+                <Spinner />
+              </View>
+            ) : pending.length === 0 ? (
+              <Text style={styles.pendingEmpty}>
+                No one has been invited yet. Invite someone above to start sharing
+                memories.
               </Text>
-            </View>
-          )}
-          {album.members.length === 0 && (
-            <Users width={20} height={20} color={colors.muted} />
-          )}
-        </View>
-        {copied && (
-          <View style={styles.copiedToast}>
-            <Check width={12} height={12} color={colors.success} />
-            <Text style={styles.copiedToastText}>Invite link copied</Text>
+            ) : (
+              pending.map((invitation) => (
+                <View key={invitation.id} style={styles.pendingRow}>
+                  <Avatar
+                    uri={`https://api.dicebear.com/7.x/avataaars/svg?seed=${
+                      invitation.inviteeEmail ?? invitation.inviteeId
+                    }`}
+                    size={40}
+                    borderWidth={1}
+                  />
+                  <View style={styles.pendingInfo}>
+                    <Text style={styles.pendingName} numberOfLines={1}>
+                      {invitation.inviteeName ?? invitation.inviteeEmail}
+                    </Text>
+                    <Text style={styles.pendingMeta} numberOfLines={1}>
+                      {invitation.inviteeEmail ?? ''}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => revoke(invitation)}
+                    style={styles.revokeButton}
+                  >
+                    <RotateCcw width={12} height={12} color={colors.danger} />
+                    <Text style={styles.revokeText}>Revoke</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
           </View>
-        )}
-      </ScrollView>
+
+          {/* Current contributors */}
+          <View style={styles.section}>
+            <Caption>Current contributors</Caption>
+            <View style={styles.contributorsRow}>
+              {album.members.slice(0, 8).map((member, i) => (
+                <View key={`${member}-${i}`} style={{ marginLeft: i === 0 ? 0 : -12 }}>
+                  <Avatar
+                    uri={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member}`}
+                    size={44}
+                    borderWidth={2}
+                  />
+                </View>
+              ))}
+              {album.members.length > 8 && (
+                <View style={styles.overflowBadge}>
+                  <Text style={styles.overflowText}>
+                    +{album.members.length - 8}
+                  </Text>
+                </View>
+              )}
+              {album.members.length === 0 && (
+                <Users width={20} height={20} color={colors.muted} />
+              )}
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.cream },
+  flex: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center' },
   missing: {
     fontSize: 22,
@@ -175,7 +264,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   missingLink: { color: colors.peach, fontWeight: '700' },
-  headerSafe: { paddingTop: 56 },
+
   header: {
     paddingHorizontal: 32,
     paddingBottom: 12,
@@ -198,121 +287,131 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 17,
-    fontStyle: 'italic',
-    fontWeight: '600',
-    color: colors.charcoal,
-  },
-  scrollContent: {
-    paddingHorizontal: 32,
-    paddingTop: 16,
-    paddingBottom: 48,
-  },
-  heroSection: { alignItems: 'center', marginBottom: 44 },
-  qrBadgeWrap: {
-    width: 96,
-    height: 96,
-    borderRadius: radius.lg,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.beige,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 28,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  qrBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.md,
-    backgroundColor: colors.peach,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 5,
-  },
-  qrText: {
-    color: colors.white,
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  headline: {
-    fontSize: 24,
-    fontStyle: 'italic',
-    fontWeight: '600',
-    color: colors.charcoal,
-    textAlign: 'center',
-    marginBottom: 14,
-  },
-  subline: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: colors.muted,
-    textAlign: 'center',
-    maxWidth: 280,
-    marginBottom: 36,
-  },
-  albumName: {
     fontWeight: '700',
     fontStyle: 'italic',
     color: colors.charcoal,
   },
-  linkRow: {
-    alignSelf: 'stretch',
+
+  scrollContent: {
+    paddingHorizontal: 32,
+    paddingBottom: 80,
+  },
+
+  inviteCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(45,45,45,0.05)',
+    padding: 22,
+    marginTop: 14,
+  },
+  inviteHeading: {
+    fontSize: 19,
+    fontStyle: 'italic',
+    fontWeight: '600',
+    color: colors.charcoal,
+    marginBottom: 8,
+  },
+  inviteSub: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: 'rgba(45,45,45,0.55)',
+    marginBottom: 18,
+  },
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     backgroundColor: colors.beige,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(45,45,45,0.05)',
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    marginBottom: 22,
+    borderRadius: radius.md,
+    paddingHorizontal: 16,
+    marginBottom: 14,
   },
-  linkText: {
+  input: {
     flex: 1,
-    fontSize: 11,
-    fontFamily: 'Courier',
-    color: 'rgba(45,45,45,0.4)',
+    paddingVertical: 15,
+    fontSize: 14,
+    color: colors.charcoal,
   },
-  copyButton: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
+  notice: {
+    fontSize: 12,
+    lineHeight: 18,
     color: colors.peach,
+    fontStyle: 'italic',
+    marginBottom: 12,
   },
-  shareButton: {
-    alignSelf: 'stretch',
-    backgroundColor: colors.charcoal,
-    paddingVertical: 19,
-    borderRadius: radius.lg,
+  sendButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 9 },
-    elevation: 9,
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.charcoal,
+    paddingVertical: 16,
+    borderRadius: radius.md,
   },
-  shareButtonText: {
+  sendButtonText: {
     color: colors.white,
     fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 3,
+    letterSpacing: 2,
     textTransform: 'uppercase',
   },
+
+  section: { marginTop: 36 },
+  pendingLoading: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  pendingEmpty: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    lineHeight: 20,
+    color: 'rgba(45,45,45,0.45)',
+    paddingVertical: 12,
+  },
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(45,45,45,0.05)',
+    padding: 14,
+    marginTop: 10,
+  },
+  pendingInfo: { flex: 1 },
+  pendingName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.charcoal,
+    marginBottom: 2,
+  },
+  pendingMeta: {
+    fontSize: 12,
+    color: 'rgba(45,45,45,0.5)',
+  },
+  revokeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    backgroundColor: '#FEF2F2',
+  },
+  revokeText: {
+    color: colors.danger,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+
   contributorsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 14,
   },
   overflowBadge: {
     width: 44,
@@ -328,28 +427,7 @@ const styles = StyleSheet.create({
   overflowText: {
     fontSize: 10,
     fontWeight: '700',
-    color: colors.muted,
-  },
-  copiedToast: {
-    position: 'absolute',
-    bottom: 24,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.white,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: radius.pill,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 5,
-  },
-  copiedToastText: {
-    fontSize: 11,
-    fontWeight: '600',
     color: colors.charcoal,
   },
 });
+

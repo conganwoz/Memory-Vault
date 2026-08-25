@@ -44,3 +44,16 @@ export interface Recap {
   photoUrls: string[];
   createdAt: string;
 }
+
+export interface Invitation {
+  id: string;
+  albumId: string;
+  albumTitle?: string;
+  inviterId: string;
+  inviterName?: string;
+  inviteeId: string;
+  inviteeEmail?: string;
+  inviteeName?: string;
+  status: 'pending' | 'accepted';
+  createdAt: string;
+}

@@ -1,58 +1,122 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, SafeAreaView } from 'react-native';
-import { Plus, Home, User } from 'lucide-react-native';
+import React, { useCallback } from 'react';
+import {
+  View,
+  Text,
+  Image,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
+import { Plus } from 'lucide-react-native';
 import { format } from 'date-fns';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 
-export default function HomeScreen({ navigation }: any) {
-  const user = { displayName: 'Sarah', photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah' };
-  const mockAlbums = [
-    { 
-      id: '1', 
-      title: 'Lan & Minh Wedding', 
-      eventDate: new Date(), 
-      photoCount: 432, 
-      coverPhotoURL: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=400' 
-    }
-  ];
+import type { RootStackParamList } from '../App';
+import { useFirebase } from '../lib/FirebaseProvider';
+import { colors, radius } from '../lib/theme';
+import { Avatar, Caption, FloatingNav } from '../lib/ui';
+import type { Album } from '../lib/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
+
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning,';
+  if (hour < 18) return 'Good afternoon,';
+  return 'Good evening,';
+}
+
+export default function HomeScreen({ navigation }: Props) {
+  const { user, albums, refreshAlbums } = useFirebase();
+
+  // Re-fetch albums whenever Home regains focus (e.g. after creating a vault).
+  useFocusEffect(
+    useCallback(() => {
+      void refreshAlbums();
+    }, [refreshAlbums])
+  );
+
+  const openAlbum = (album: Album) =>
+    navigation.navigate('AlbumDetail', { albumId: album.id });
 
   return (
-    <SafeAreaView className="flex-1 bg-[#FDFBF7]">
-      {/* Glow Blobs equivalent in RN usually uses Absolute View with blur or SVG */}
-      <View className="p-8 pb-4 flex-row justify-between items-center">
+    <View style={styles.root}>
+      {/* Header */}
+      <View style={[styles.header, styles.headerSafe]}>
         <View>
-          <Text className="text-2xl font-serif text-[#2D2D2D]">Good morning,</Text>
-          <Text className="text-3xl font-serif text-[#E89E82] italic">Sarah</Text>
+          <Text style={styles.greeting}>{greeting()}</Text>
+          <Text style={styles.userName}>
+            {user?.displayName?.split(' ')[0] ?? 'Friend'}
+          </Text>
         </View>
-        <TouchableOpacity 
+        <TouchableOpacity
+          activeOpacity={0.85}
           onPress={() => navigation.navigate('Profile')}
-          className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-[#2D2D2D0D]"
+          style={styles.avatarButton}
         >
-          <Image source={{ uri: user.photoURL }} className="w-full h-full" />
+          <Avatar uri={user?.photoURL} size={48} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView className="flex-1 px-6 pt-8 pb-32">
-        <View className="flex-row items-center justify-between mb-4">
-          <Text className="text-[10px] font-bold uppercase tracking-[3px] text-[#8C8C8C]">Your Memories</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('CreateAlbum')}>
-            <Plus size={20} color="#8C8C8C" />
+      {/* Album list */}
+      <ScrollView
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.sectionRow}>
+          <Caption>Your Memories</Caption>
+          <TouchableOpacity
+            hitSlop={12}
+            onPress={() => navigation.navigate('CreateAlbum')}
+          >
+            <Plus width={20} height={20} color={colors.muted} />
           </TouchableOpacity>
         </View>
 
-        {mockAlbums.map((album) => (
-          <TouchableOpacity 
+        {albums.length === 0 && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>No vaults yet</Text>
+            <Text style={styles.emptyBody}>
+              Tap the + button below to create your first shared memory vault.
+            </Text>
+          </View>
+        )}
+
+        {albums.map((album) => (
+          <TouchableOpacity
             key={album.id}
-            onPress={() => navigation.navigate('AlbumDetail', { album })}
-            className="mb-10 relative"
+            activeOpacity={0.9}
+            onPress={() => openAlbum(album)}
+            style={styles.cardWrap}
           >
-            <View className="absolute inset-0 bg-[#2D2D2D0D] rounded-[40px] translate-x-2 translate-y-2" />
-            <View className="relative aspect-[4/5] rounded-[40px] overflow-hidden shadow-2xl border border-white/40 bg-gray-100">
-              <Image source={{ uri: album.coverPhotoURL }} className="w-full h-full" />
-              <View className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-              <View className="absolute bottom-8 left-8 right-8">
-                <Text className="text-2xl font-serif text-white mb-2">{album.title}</Text>
-                <Text className="text-[10px] font-bold text-white uppercase tracking-widest opacity-80">
-                  {format(album.eventDate, 'MMM d, yyyy')} • {album.photoCount} Moments
+            {/* Book-stack effect */}
+            <View
+              style={[
+                styles.stackLayer,
+                { transform: [{ translateX: 8 }, { translateY: 8 }] },
+              ]}
+            />
+            <View
+              style={[
+                styles.stackLayer,
+                { transform: [{ translateX: 4 }, { translateY: 4 }] },
+              ]}
+            />
+
+            <View style={styles.card}>
+              <Image
+                source={{ uri: album.coverPhotoURL }}
+                style={styles.coverImage}
+              />
+              <View style={styles.coverGradientFallback} />
+              <View style={styles.cardInfo}>
+                <Text style={styles.cardTitle} numberOfLines={2}>
+                  {album.title}
+                </Text>
+                <Text style={styles.cardMeta}>
+                  {format(new Date(album.eventDate), 'MMM d, yyyy')} •{' '}
+                  {album.photoCount} Moments
                 </Text>
               </View>
             </View>
@@ -60,21 +124,127 @@ export default function HomeScreen({ navigation }: any) {
         ))}
       </ScrollView>
 
-      {/* Navigation */}
-      <View className="absolute bottom-8 left-[7.5%] w-[85%] h-20 bg-[#2D2D2D] rounded-[40px] flex-row items-center justify-around px-8 shadow-2xl">
-        <TouchableOpacity>
-          <Home size={24} color="#E89E82" />
-        </TouchableOpacity>
-        <TouchableOpacity 
-          onPress={() => navigation.navigate('CreateAlbum')}
-          className="w-12 h-12 bg-white items-center justify-center rounded-2xl shadow-lg ring-4 ring-white/10"
-        >
-          <Plus size={28} color="#2D2D2D" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-          <User size={24} color="#FDFBF766" />
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+      <FloatingNav
+        active="home"
+        onHome={() => {}}
+        onCreate={() => navigation.navigate('CreateAlbum')}
+        onProfile={() => navigation.navigate('Profile')}
+      />
+    </View>
   );
 }
+
+const CARD_ASPECT = 4 / 5;
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.cream },
+  headerSafe: { paddingTop: 60 },
+  header: {
+    paddingHorizontal: 32,
+    paddingBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  greeting: {
+    fontSize: 22,
+    color: colors.charcoal,
+    fontWeight: '500',
+  },
+  userName: {
+    fontSize: 26,
+    fontStyle: 'italic',
+    fontWeight: '600',
+    color: colors.peach,
+  },
+  avatarButton: {
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  listContent: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 140,
+  },
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+    marginHorizontal: 8,
+  },
+  cardWrap: {
+    marginBottom: 36,
+    position: 'relative',
+  },
+  stackLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(45,45,45,0.06)',
+    borderRadius: 40,
+  },
+  card: {
+    borderRadius: 40,
+    overflow: 'hidden',
+    aspectRatio: CARD_ASPECT,
+    backgroundColor: '#EDE9E1',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 10,
+  },
+  coverImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  coverGradientFallback: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(45,45,45,0.28)',
+  },
+  cardInfo: {
+    position: 'absolute',
+    left: 28,
+    right: 28,
+    bottom: 28,
+  },
+  cardTitle: {
+    color: colors.white,
+    fontSize: 24,
+    fontStyle: 'italic',
+    fontWeight: '600',
+    lineHeight: 30,
+    marginBottom: 8,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  cardMeta: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 64,
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontStyle: 'italic',
+    color: colors.charcoal,
+    marginBottom: 10,
+  },
+  emptyBody: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.muted,
+    textAlign: 'center',
+  },
+});

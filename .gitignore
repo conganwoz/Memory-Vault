@@ -1,4 +1,3 @@
-node_modules/
 build/
 dist/
 coverage/
@@ -6,3 +5,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# React Native / Expo
+node_modules/
+.expo/
+ios/
+android/

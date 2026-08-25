@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "Kindred",
+    "slug": "kindred-memory-vault",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "kindred",
+    "splash": {
+      "backgroundColor": "#2D2D2D",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kindred.memoryvault",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Kindred uses your camera to capture spontaneous moments for your shared memory vaults.",
+        "NSPhotoLibraryUsageDescription": "Kindred needs access to your photo library so you can add existing memories to a vault.",
+        "NSPhotoLibraryAddUsageDescription": "Kindred can save recap images back to your photo library."
+      }
+    },
+    "android": {
+      "package": "com.kindred.memoryvault",
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Kindred to use the camera to capture moments."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Kindred to access your photos to add memories to a vault."
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ],
+    "extra": {
+      "googleWebClientId": "",
+      "googleIosClientId": "",
+      "googleAndroidClientId": "",
+      "apiBaseUrl": "",
+      "apiPort": 4000
+    }
+  }
+}

@@ -350,7 +350,8 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
                           activeOpacity={0.92}
                           onPress={() =>
                             navigation.navigate('PhotoViewer', {
-                              photo,
+                              photos,
+                              initialIndex: photos.indexOf(photo),
                               albumOwnerId: album.ownerId,
                             })
                           }

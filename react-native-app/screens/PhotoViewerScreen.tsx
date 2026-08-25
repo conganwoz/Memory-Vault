@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,11 @@ import {
   Share,
   Alert,
   ScrollView,
+  Animated,
+  PanResponder,
+  useWindowDimensions,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -32,42 +37,119 @@ import { Avatar } from '../lib/ui';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PhotoViewer'>;
 
-export default function PhotoViewerScreen({ route, navigation }: Props) {
-  const { photo, albumOwnerId, isDeleted: isDeletedParam } = route.params;
-  const insets = useSafeAreaInsets();
-  const { user } = useFirebase();
-  const [liked, setLiked] = useState(false);
-  const [imageRatio, setImageRatio] = useState<number | null>(null);
+const clamp = (v: number, min: number, max: number) =>
+  Math.min(Math.max(v, min), max);
 
-  // Only the photo's uploader or the album creator may delete / restore it.
+export default function PhotoViewerScreen({ route, navigation }: Props) {
+  const { photos, initialIndex, albumOwnerId, isDeleted: isDeletedParam } = route.params;
+  const insets = useSafeAreaInsets();
+  const { width: pageWidth, height: windowHeight } = useWindowDimensions();
+  const { user } = useFirebase();
+
+  const [index, setIndex] = useState(() =>
+    photos.length === 0 ? 0 : clamp(initialIndex ?? 0, 0, photos.length - 1)
+  );
+  const [liked, setLiked] = useState(false);
+  const [dismissing, setDismissing] = useState(false);
+  const dismissProgress = useRef(new Animated.Value(0)).current;
+
+  const photo = photos[index];
   const canModerate =
-    !!user &&
-    (user.userId === photo.uploaderId || user.userId === albumOwnerId);
+    !!user && !!photo && (user.userId === photo.uploaderId || user.userId === albumOwnerId);
   // Trash screens pass `isDeleted` explicitly, so restore still works even if
   // an older backend doesn't serialize `deletedAt`.
-  const isDeleted = isDeletedParam ?? !!photo.deletedAt;
+  const isDeleted = isDeletedParam ?? !!photo?.deletedAt;
 
-  // Show the photo at its real aspect ratio (no distortion, no forced square).
+  // Reset per-photo UI state when the user pages to another photo.
   useEffect(() => {
-    let cancelled = false;
-    const url = resolveAssetUrl(photo.url);
-    if (!url) return;
+    setLiked(false);
+  }, [photo?.id]);
 
-    Image.getSize(
-      url,
-      (width, height) => {
-        if (!cancelled && width > 0 && height > 0) setImageRatio(width / height);
-      },
-      () => {
-        // Unknown dimensions — fall back to the default (square) container.
-        if (!cancelled) setImageRatio(1);
-      }
+  /** Snaps the current page index after a swipe settles on a photo. */
+  const onPageSettled = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (photos.length === 0 || pageWidth <= 0) return;
+    const next = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
+    setIndex(clamp(next, 0, photos.length - 1));
+  };
+
+  const pagerRef = useRef<ScrollView>(null);
+
+  // Ensure the pager opens on the tapped photo even on platforms where the
+  // ScrollView ignores the `contentOffset` prop on first render.
+  useEffect(() => {
+    const x = (initialIndex ?? 0) * pageWidth;
+    pagerRef.current?.scrollTo({ x, y: 0, animated: false });
+  }, [initialIndex, pageWidth]);
+
+  // Swipe-down to dismiss: drags the whole viewer down. Releasing past the
+  // threshold (or a fast downward fling) pops the screen; otherwise it springs
+  // back into place.
+  const dismiss = useCallback(() => {
+    setDismissing(true);
+    Animated.timing(dismissProgress, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => navigation.goBack());
+  }, [dismissProgress, navigation]);
+
+  const resetDismiss = useCallback(() => {
+    Animated.spring(dismissProgress, {
+      toValue: 0,
+      useNativeDriver: true,
+      bounciness: 0,
+      speed: 24,
+    }).start();
+  }, [dismissProgress]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        // Only claim clearly-vertical downward drags; horizontal swipes are
+        // left to the paging ScrollView.
+        onMoveShouldSetPanResponder: (_, g) =>
+          !dismissing && g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx) * 1.25,
+        onPanResponderMove: (_, g) => {
+          if (g.dy < 0) return;
+          dismissProgress.setValue(Math.min(1, g.dy / (windowHeight * 0.3)));
+        },
+        onPanResponderRelease: (_, g) => {
+          if (g.dy > 90 || g.vy > 0.8) dismiss();
+          else resetDismiss();
+        },
+        onPanResponderTerminate: resetDismiss,
+      }),
+    [dismissing, windowHeight, dismissProgress, dismiss, resetDismiss]
+  );
+
+  const translateY = dismissProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, windowHeight],
+  });
+  const containerOpacity = dismissProgress.interpolate({
+    inputRange: [0, 0.7, 1],
+    outputRange: [1, 0.9, 0.5],
+  });
+
+  if (!photo || photos.length === 0) {
+    return (
+      <View style={styles.root}>
+        <StatusBar style="light" />
+        <View style={[styles.topControls, { paddingTop: insets.top + 8 }]}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => navigation.goBack()}
+            style={styles.glassButton}
+          >
+            <ChevronLeft width={24} height={24} color={colors.white} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyText}>No photo to show.</Text>
+        </View>
+      </View>
     );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [photo.url]);
+  }
 
   const toggleLike = async () => {
     const newLiked = !liked;
@@ -156,8 +238,21 @@ export default function PhotoViewerScreen({ route, navigation }: Props) {
   };
 
   return (
-    <View style={styles.root}>
+    <Animated.View
+      style={[styles.root, { transform: [{ translateY }], opacity: containerOpacity }]}
+      {...panResponder.panHandlers}
+    >
       <StatusBar style="light" />
+
+      {/* Page counter */}
+      {photos.length > 1 && (
+        <View style={[styles.counterBadge, { top: insets.top + 56 }]} pointerEvents="none">
+          <Text style={styles.counterText}>
+            {index + 1} / {photos.length}
+          </Text>
+        </View>
+      )}
+
       {/* Top controls */}
       <View style={[styles.topControls, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity
@@ -200,23 +295,37 @@ export default function PhotoViewerScreen({ route, navigation }: Props) {
 
       {/* Trash badge for photos in the 7-day grace window */}
       {isDeleted && (
-        <View style={[styles.deletedBadge, { top: insets.top + 68 }]} pointerEvents="none">
+        <View
+          style={[styles.deletedBadge, { top: insets.top + (photos.length > 1 ? 94 : 66) }]}
+          pointerEvents="none"
+        >
           <Text style={styles.deletedBadgeText}>IN TRASH — RESTORES FOR 7 DAYS</Text>
         </View>
       )}
 
-      {/* The photo */}
+      {/* Paged photos — swipe left/right to browse */}
       <ScrollView
-        contentContainerStyle={styles.imageScroll}
-        maximumZoomScale={3}
-        minimumZoomScale={1}
-        showsVerticalScrollIndicator={false}
+        ref={pagerRef}
+        horizontal
+        pagingEnabled
+        bounces={false}
+        showsHorizontalScrollIndicator={false}
+        scrollEnabled={!dismissing}
+        onMomentumScrollEnd={onPageSettled}
+        contentOffset={{ x: initialIndex * pageWidth, y: 0 }}
+        style={styles.pager}
       >
-        <Image
-          source={{ uri: resolveAssetUrl(photo.url) }}
-          style={[styles.image, imageRatio ? { aspectRatio: imageRatio } : null]}
-          resizeMode="contain"
-        />
+        {photos.map((p, i) => (
+          <View key={p.id} style={[styles.page, { width: pageWidth }]}>
+            {Math.abs(i - index) <= 2 ? (
+              <Image
+                source={{ uri: resolveAssetUrl(p.url) }}
+                style={styles.image}
+                resizeMode="contain"
+              />
+            ) : null}
+          </View>
+        ))}
       </ScrollView>
 
       {/* Footer info */}
@@ -290,7 +399,7 @@ export default function PhotoViewerScreen({ route, navigation }: Props) {
           </View>
         </View>
       </LinearGradient>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -340,14 +449,47 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.2)',
     overflow: 'hidden',
   },
-  imageScroll: {
-    flexGrow: 1,
+  pager: {
+    flex: 1,
+  },
+  page: {
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
   image: {
     width: '100%',
-    aspectRatio: 1, // fallback while the real dimensions load (see imageRatio)
+    height: '100%',
+  },
+  counterBadge: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    alignItems: 'center',
+    zIndex: 6,
+  },
+  counterText: {
+    color: colors.white,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(45,45,45,0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    overflow: 'hidden',
+  },
+  emptyWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+    fontStyle: 'italic',
   },
   footerGradient: {
     position: 'absolute',

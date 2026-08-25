@@ -29,7 +29,12 @@ export type RootStackParamList = {
   CreateAlbum: undefined;
   AlbumDetail: { albumId: string };
   Invite: { albumId: string };
-  PhotoViewer: { photo: Photo; albumOwnerId?: string; isDeleted?: boolean };
+  PhotoViewer: {
+    photos: Photo[];
+    initialIndex: number;
+    albumOwnerId?: string;
+    isDeleted?: boolean;
+  };
   RecentlyDeleted: { albumId: string; albumOwnerId?: string };
   Upload: { albumId: string };
   Recap: { albumId: string };

@@ -145,7 +145,8 @@ export default function RecentlyDeletedScreen({ route, navigation }: Props) {
                     activeOpacity={0.9}
                     onPress={() =>
                       navigation.navigate('PhotoViewer', {
-                        photo,
+                        photos,
+                        initialIndex: pIndex,
                         albumOwnerId,
                         isDeleted: true,
                       })

@@ -25,6 +25,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '../App';
 import { useFirebase } from '../lib/FirebaseProvider';
+import { uploadsApi } from '../lib/api/endpoints';
+import { detectImageTone, type CoverTone } from '../lib/imageTone';
 import { colors, radius } from '../lib/theme';
 import { Caption, PrimaryButton } from '../lib/ui';
 
@@ -45,12 +47,17 @@ const PRIVACY_OPTIONS = [
   },
 ];
 
-/** Max base64 length (~chars) we are willing to store inline in Firestore. */
-const MAX_INLINE_BASE64 = 900_000;
-
-/** Fallback cover used when a picked image is too large to store inline. */
+/** Fallback cover used when no cover is picked (or the upload fails). */
 const DEFAULT_COVER_URL =
   'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?auto=format&fit=crop&q=80&w=800';
+
+/** A locally picked cover, kept as a file reference so it can be streamed
+ * to the backend on create (no base64 buffered in memory). */
+interface PickedCover {
+  uri: string;
+  name?: string;
+  type?: string;
+}
 
 export default function CreateAlbumScreen({ navigation }: Props) {
   const { createAlbum } = useFirebase();
@@ -59,41 +66,49 @@ export default function CreateAlbumScreen({ navigation }: Props) {
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
   const [privacy, setPrivacy] = useState<'invite' | 'link'>('invite');
-  const [coverUri, setCoverUri] = useState<string | null>(null);
+  const [cover, setCover] = useState<PickedCover | null>(null);
   const [creating, setCreating] = useState(false);
 
   const pickCover = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.4,
-      base64: true,
     });
     if (result.canceled) return;
     const asset = result.assets[0];
-    if (asset.base64 && asset.base64.length <= MAX_INLINE_BASE64) {
-      setCoverUri(`data:image/jpeg;base64,${asset.base64}`);
-    } else if (asset.uri) {
-      // Too large to inline — show it as a preview for this session only.
-      // handleCreate falls back to DEFAULT_COVER_URL when persisting, since a
-      // local file:// URI would be unreadable on other devices / sessions.
-      setCoverUri(asset.uri);
-    }
+    if (!asset.uri) return;
+    setCover({
+      uri: asset.uri,
+      name: asset.fileName ?? 'cover.jpg',
+      type: asset.mimeType ?? 'image/jpeg',
+    });
   };
 
   const handleCreate = async () => {
     if (!title.trim() || creating) return;
     setCreating(true);
     try {
+      let coverPhotoURL = DEFAULT_COVER_URL;
+      let coverTone: CoverTone | undefined;
+
+      if (cover) {
+        try {
+          // Upload the chosen cover to the backend so it is stored on the
+          // server and visible to every member and device.
+          coverPhotoURL = await uploadsApi.uploadFile(cover);
+          // Detect dark/light so the album title stays readable on top.
+          coverTone = await detectImageTone(cover.uri);
+        } catch (error) {
+          console.warn('Cover upload failed, using default cover:', error);
+        }
+      }
+
       await createAlbum({
         title: title.trim(),
         eventDate: date.toISOString(),
         privacy,
-        // Only persist inline data URIs (readable by anyone); a local file://
-        // path would only work on this device for this session.
-        coverPhotoURL:
-          coverUri && coverUri.startsWith('data:image/')
-            ? coverUri
-            : DEFAULT_COVER_URL,
+        coverPhotoURL,
+        coverTone,
       });
       navigation.goBack();
     } catch (error) {
@@ -131,9 +146,9 @@ export default function CreateAlbumScreen({ navigation }: Props) {
           onPress={pickCover}
           style={styles.coverPicker}
         >
-          {coverUri ? (
+          {cover ? (
             <>
-              <Image source={{ uri: coverUri }} style={styles.coverPreview} />
+              <Image source={{ uri: cover.uri }} style={styles.coverPreview} />
               <View style={styles.coverOverlay}>
                 <Camera width={18} height={18} color={colors.white} />
                 <Text style={styles.coverOverlayText}>Change Cover</Text>

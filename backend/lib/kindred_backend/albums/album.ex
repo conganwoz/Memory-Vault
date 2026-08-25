@@ -17,6 +17,7 @@ defmodule Kindred.Albums.Album do
     field :title, :string
     field :description, :string
     field :cover_photo_url, :string
+    field :cover_tone, :string, default: "dark"
     field :event_date, :utc_datetime
     field :owner_id, :binary_id
     field :privacy, :string, default: "invite"
@@ -36,6 +37,7 @@ defmodule Kindred.Albums.Album do
       :title,
       :description,
       :cover_photo_url,
+      :cover_tone,
       :event_date,
       :privacy,
       :photo_count,
@@ -45,6 +47,7 @@ defmodule Kindred.Albums.Album do
     |> validate_length(:title, max: 100)
     |> validate_length(:description, max: 500)
     |> validate_inclusion(:privacy, ~w(invite link qr))
+    |> validate_inclusion(:cover_tone, ~w(dark light))
     |> validate_number(:photo_count, greater_than_or_equal_to: 0)
   end
 end

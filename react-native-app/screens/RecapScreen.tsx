@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Clipboard from 'expo-clipboard';
+import { StatusBar } from 'expo-status-bar';
 import {
   ChevronLeft,
   Sparkles,
@@ -160,6 +161,7 @@ ${recap.summary}`);
 
   return (
     <View style={styles.root}>
+      <StatusBar style="light" />
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity

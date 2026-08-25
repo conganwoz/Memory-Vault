@@ -16,7 +16,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Kindred uses your camera to capture spontaneous moments for your shared memory vaults.",
         "NSPhotoLibraryUsageDescription": "Kindred needs access to your photo library so you can add existing memories to a vault.",
-        "NSPhotoLibraryAddUsageDescription": "Kindred can save recap images back to your photo library."
+        "NSPhotoLibraryAddUsageDescription": "Kindred can save recap images back to your photo library.",
+        "UIViewControllerBasedStatusBarAppearance": true
       }
     },
     "android": {

@@ -202,6 +202,7 @@ defmodule Kindred.Albums do
       "title" => album.title,
       "description" => album.description,
       "coverPhotoURL" => album.cover_photo_url,
+      "coverTone" => album.cover_tone || "dark",
       "eventDate" => album.event_date,
       "ownerId" => album.owner_id,
       "members" => Enum.map(album.members || [], & &1.id),

@@ -37,6 +37,7 @@ defmodule KindredWeb.AlbumController do
       title: params["title"],
       description: params["description"],
       cover_photo_url: params["coverPhotoURL"],
+      cover_tone: params["coverTone"] || "dark",
       event_date: params["eventDate"],
       privacy: params["privacy"] || "invite",
       owner_id: user.id
@@ -73,6 +74,7 @@ defmodule KindredWeb.AlbumController do
         |> maybe_put(params, "title", :title)
         |> maybe_put(params, "description", :description)
         |> maybe_put(params, "coverPhotoURL", :cover_photo_url)
+        |> maybe_put(params, "coverTone", :cover_tone)
         |> maybe_put(params, "eventDate", :event_date)
         |> maybe_put(params, "privacy", :privacy)
 

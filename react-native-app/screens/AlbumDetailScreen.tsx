@@ -7,10 +7,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
-  Dimensions,
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import {
   ChevronLeft,
   Share2,
@@ -27,7 +27,8 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import type { RootStackParamList } from '../App';
 import { useFirebase } from '../lib/FirebaseProvider';
-import { photosApi } from '../lib/api/endpoints';
+import { albumsApi, photosApi, uploadsApi } from '../lib/api/endpoints';
+import { detectImageTone } from '../lib/imageTone';
 import { resolveAssetUrl } from '../lib/config';
 import { colors, radius } from '../lib/theme';
 import { Avatar, Caption, Spinner } from '../lib/ui';
@@ -36,11 +37,10 @@ import type { Album, Photo } from '../lib/types';
 type Props = NativeStackScreenProps<RootStackParamList, 'AlbumDetail'>;
 
 const HEADER_HEIGHT = 460;
-const SCREEN_WIDTH = Dimensions.get('window').width;
 
 export default function AlbumDetailScreen({ route, navigation }: Props) {
   const { albumId } = route.params;
-  const { albums } = useFirebase();
+  const { user, albums, refreshAlbums } = useFirebase();
   const album: Album | undefined = albums.find((a) => a.id === albumId);
 
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -66,21 +66,28 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
     }, [loadPhotos])
   );
 
-  // Scroll-driven parallax on the hero header.
+  // Collapsing hero header: as you scroll, the whole header (cover + overlays)
+  // slides up and fades out — a vertical-only contraction (width stays full).
+  // The image is NEVER resized or scaled; it is only clipped by the header,
+  // so the cover can't be distorted. The photo list fills the space.
   const scrollY = useRef(new Animated.Value(0)).current;
-  const headerTranslateY = scrollY.interpolate({
+  const heroTranslateY = scrollY.interpolate({
     inputRange: [0, HEADER_HEIGHT],
-    outputRange: [0, HEADER_HEIGHT * 0.35],
-    extrapolateRight: 'extend',
+    outputRange: [0, -HEADER_HEIGHT],
+    extrapolate: 'clamp',
   });
-  const headerScale = scrollY.interpolate({
-    inputRange: [-100, 0],
-    outputRange: [1.15, 1],
-    extrapolateLeft: 'extend',
+  const heroOpacity = scrollY.interpolate({
+    inputRange: [0, HEADER_HEIGHT * 0.45, HEADER_HEIGHT],
+    outputRange: [1, 0.6, 0],
+    extrapolate: 'clamp',
   });
 
   const openMoreMenu = () => {
-    Alert.alert('Vault actions', undefined, [
+    const options: Array<{
+      text: string;
+      onPress?: () => void;
+      style?: 'default' | 'cancel' | 'destructive';
+    }> = [
       {
         text: 'Invite loved ones',
         onPress: () => navigation.navigate('Invite', { albumId }),
@@ -89,8 +96,52 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
         text: 'Memory recap',
         onPress: () => navigation.navigate('Recap', { albumId }),
       },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    ];
+
+    // Changing the cover is an owner action (enforced server-side too).
+    if (album && user && album.ownerId === user.userId) {
+      options.push({
+        text: 'Change cover photo',
+        onPress: () => void changeCover(),
+      });
+    }
+
+    options.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Vault actions', undefined, options);
+  };
+
+  /** Picks a new cover, uploads it, and updates the album. */
+  const changeCover = async () => {
+    if (!album) return;
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.6,
+      });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if (!asset.uri) return;
+
+      // Stream the chosen image to the backend, then point the album at it.
+      const url = await uploadsApi.uploadFile({
+        uri: asset.uri,
+        name: asset.fileName ?? 'cover.jpg',
+        type: asset.mimeType ?? 'image/jpeg',
+      });
+      // Detect dark/light so the title stays readable on the new cover.
+      const coverTone = await detectImageTone(asset.uri);
+
+      await albumsApi.update(album.id, { coverPhotoURL: url, coverTone });
+      await refreshAlbums();
+
+      Alert.alert('Cover updated', 'Your new cover photo is live.');
+    } catch (error) {
+      console.warn('Failed to update cover:', error);
+      Alert.alert(
+        'Could not update cover',
+        error instanceof Error ? error.message : 'Please try again.'
+      );
+    }
   };
 
   // Group photos by timestampLabel.
@@ -114,26 +165,33 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
     );
   }
 
+  // Dark covers get light text + a bottom scrim; light covers keep the
+  // original cream gradient + charcoal text.
+  const isDarkCover = album.coverTone !== 'light';
+
   return (
     <View style={styles.root}>
-      {/* Immersive parallax header */}
+      {/* Collapsing hero header — pinned at top; contracts vertically + fades */}
       <View style={styles.headerWrap}>
         <Animated.View
           style={[
-            styles.headerImageWrap,
-            { transform: [{ translateY: headerTranslateY }, { scale: headerScale }] },
+            StyleSheet.absoluteFillObject,
+            { transform: [{ translateY: heroTranslateY }], opacity: heroOpacity },
           ]}
         >
           <Image
-            source={{ uri: album.coverPhotoURL }}
+            source={{ uri: resolveAssetUrl(album.coverPhotoURL) }}
             style={styles.headerImage}
           />
           <LinearGradient
-            colors={['rgba(253,251,247,1)', 'rgba(45,45,45,0.25)', 'rgba(45,45,45,0)']}
+            colors={
+              isDarkCover
+                ? ['rgba(253,251,247,0)', 'rgba(45,45,45,0.4)', 'rgba(45,45,45,0.8)']
+                : ['rgba(253,251,247,1)', 'rgba(45,45,45,0.25)', 'rgba(45,45,45,0)']
+            }
             locations={[0, 0.55, 1]}
             style={StyleSheet.absoluteFillObject}
           />
-        </Animated.View>
 
         {/* Top controls */}
         <View style={[styles.topControls, styles.topControlsSafe]}>
@@ -164,8 +222,10 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
 
         {/* Hero info */}
         <View style={styles.heroInfo}>
-          <Text style={styles.heroTitle}>{album.title}</Text>
-          <Text style={styles.heroDate}>
+          <Text style={[styles.heroTitle, isDarkCover && styles.heroTitleDark]}>
+            {album.title}
+          </Text>
+          <Text style={[styles.heroDate, isDarkCover && styles.heroDateDark]}>
             {format(new Date(album.eventDate), 'MMMM d, yyyy')}
           </Text>
 
@@ -205,10 +265,11 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
               <Text style={styles.recapButtonText}>Memory Recap</Text>
             </TouchableOpacity>
           </View>
-        </View>
+          </View>
+        </Animated.View>
       </View>
 
-      {/* Timeline content */}
+      {/* Timeline content — scrolls up under the collapsing hero */}
       <Animated.ScrollView
         contentContainerStyle={styles.timelineContent}
         showsVerticalScrollIndicator={false}
@@ -315,12 +376,9 @@ const styles = StyleSheet.create({
     zIndex: 1,
     overflow: 'hidden',
   },
-  headerImageWrap: {
-    ...StyleSheet.absoluteFillObject,
-  },
   headerImage: {
-    width: SCREEN_WIDTH,
-    height: HEADER_HEIGHT,
+    width: '100%',
+    height: '100%',
     resizeMode: 'cover',
   },
   topControlsSafe: { paddingTop: 56 },
@@ -362,12 +420,21 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     marginBottom: 6,
   },
+  heroTitleDark: {
+    color: colors.white,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+  },
   heroDate: {
     fontSize: 13,
     fontStyle: 'italic',
     fontWeight: '500',
     color: 'rgba(45,45,45,0.6)',
     marginBottom: 28,
+  },
+  heroDateDark: {
+    color: 'rgba(255,255,255,0.8)',
   },
   heroRow: {
     flexDirection: 'row',
@@ -428,7 +495,7 @@ const styles = StyleSheet.create({
   },
 
   timelineContent: {
-    paddingTop: HEADER_HEIGHT - 40,
+    paddingTop: HEADER_HEIGHT,
     paddingHorizontal: 24,
     paddingBottom: 140,
   },

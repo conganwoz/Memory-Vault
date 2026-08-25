@@ -10,6 +10,7 @@ import {
   Animated,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { StatusBar } from 'expo-status-bar';
 import {
   X,
   RotateCcw,
@@ -25,6 +26,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../App';
 import { photosApi } from '../lib/api/endpoints';
 import { useFirebase } from '../lib/FirebaseProvider';
+import { resolveAssetUrl } from '../lib/config';
 import { colors, radius } from '../lib/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Camera'>;
@@ -132,6 +134,7 @@ export default function CameraScreen({ route, navigation }: Props) {
   if (!permission.granted) {
     return (
       <View style={[styles.root, styles.permissionWrap]}>
+        <StatusBar style="light" />
         <Text style={styles.permissionTitle}>Camera access needed</Text>
         <Text style={styles.permissionBody}>
           Kindred uses your camera to capture spontaneous moments for this
@@ -163,6 +166,7 @@ export default function CameraScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.root}>
+      <StatusBar style="light" />
       {/* Camera preview */}
       <CameraView
         ref={cameraRef}
@@ -182,7 +186,7 @@ export default function CameraScreen({ route, navigation }: Props) {
             <View style={styles.albumChipThumb}>
               {album && (
                 <Image
-                  source={{ uri: album.coverPhotoURL }}
+                  source={{ uri: resolveAssetUrl(album.coverPhotoURL) }}
                   style={styles.albumChipThumbImage}
                 />
               )}

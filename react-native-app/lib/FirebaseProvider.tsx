@@ -115,6 +115,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
           title: albumData.title ?? 'Untitled Vault',
           description: albumData.description,
           coverPhotoURL: albumData.coverPhotoURL,
+          coverTone: albumData.coverTone,
           eventDate: albumData.eventDate,
           privacy: albumData.privacy ?? 'invite',
         });

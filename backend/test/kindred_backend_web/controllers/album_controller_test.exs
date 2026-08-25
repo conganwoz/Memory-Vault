@@ -34,6 +34,24 @@ defmodule KindredWeb.AlbumControllerTest do
       assert album["title"] == "Summer in Tuscany"
       assert album["photoCount"] == 0
       assert album["members"] == [user.id]
+      # covers default to the safe "dark" tone (light text)
+      assert album["coverTone"] == "dark"
+    end
+
+    test "stores the cover tone when creating an album", %{conn: conn} do
+      user = Fixtures.user()
+      conn = Fixtures.auth_conn(conn, user)
+
+      conn =
+        post(conn, "/api/albums", %{
+          title: "Bright Day",
+          coverPhotoURL: "/uploads/albums/x/cover.png",
+          coverTone: "light"
+        })
+
+      assert %{"album" => album} = json_response(conn, 201)
+      assert album["coverTone"] == "light"
+      assert Kindred.Albums.get_album!(album["id"]).cover_tone == "light"
     end
 
     test "requires a title", %{conn: conn} do
@@ -84,6 +102,36 @@ defmodule KindredWeb.AlbumControllerTest do
         |> put("/api/albums/#{album.id}", %{title: "Renamed"})
 
       assert %{"album" => %{"title" => "Renamed"}} = json_response(conn, 200)
+    end
+
+    test "owner can change the cover photo", %{conn: conn} do
+      owner = Fixtures.user()
+      member = Fixtures.user()
+      {:ok, album} = Kindred.Albums.create_album(%{title: "Covered", owner_id: owner.id})
+      {:ok, album} = Kindred.Albums.add_member(album, member.email)
+
+      cover = "/uploads/albums/#{owner.id}/cover-new.png"
+
+      # members cannot change the cover → 403
+      conn =
+        conn
+        |> Fixtures.auth_conn(member)
+        |> put("/api/albums/#{album.id}", %{coverPhotoURL: cover, coverTone: "light"})
+
+      assert %{"errors" => _} = json_response(conn, 403)
+
+      # owner can → 200 and the new cover + tone are persisted
+      conn =
+        build_conn()
+        |> Fixtures.auth_conn(owner)
+        |> put("/api/albums/#{album.id}", %{coverPhotoURL: cover, coverTone: "light"})
+
+      assert %{"album" => %{"coverPhotoURL" => cover, "coverTone" => "light"}} =
+               json_response(conn, 200)
+
+      album = Kindred.Albums.get_album!(album.id)
+      assert album.cover_photo_url == cover
+      assert album.cover_tone == "light"
     end
 
     test "owner can delete an album", %{conn: conn} do

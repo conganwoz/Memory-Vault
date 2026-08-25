@@ -30,6 +30,7 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import type { RootStackParamList } from '../App';
 import { useFirebase } from '../lib/FirebaseProvider';
+import { resolveAssetUrl } from '../lib/config';
 import { colors, radius } from '../lib/theme';
 import { Avatar, Caption, FloatingNav } from '../lib/ui';
 
@@ -211,7 +212,7 @@ export default function ProfileScreen({ navigation }: Props) {
                 >
                   <View style={styles.memoryImageWrap}>
                     <Image
-                      source={{ uri: memory.coverPhotoURL }}
+                      source={{ uri: resolveAssetUrl(memory.coverPhotoURL) }}
                       style={styles.memoryImage}
                     />
                     <View style={styles.contributorChip}>

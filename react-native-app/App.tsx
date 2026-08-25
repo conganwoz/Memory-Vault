@@ -88,7 +88,6 @@ function RootNavigator() {
             options={{
               animation: 'fade',
               contentStyle: { backgroundColor: colors.charcoal },
-              statusBarStyle: 'light',
             }}
           />
           <Stack.Screen name="Upload" component={UploadScreen} />
@@ -98,7 +97,6 @@ function RootNavigator() {
             options={{
               animation: 'fade',
               contentStyle: { backgroundColor: colors.charcoal },
-              statusBarStyle: 'light',
             }}
           />
           <Stack.Screen
@@ -108,7 +106,6 @@ function RootNavigator() {
               animation: 'fade',
               gestureEnabled: false,
               contentStyle: { backgroundColor: '#000000' },
-              statusBarStyle: 'light',
             }}
           />
         </>

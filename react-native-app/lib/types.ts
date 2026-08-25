@@ -11,6 +11,8 @@ export interface Album {
   title: string;
   description?: string;
   coverPhotoURL: string;
+  /** Luminance class of the cover — used to pick contrasting text. */
+  coverTone: 'dark' | 'light';
   eventDate: string;
   ownerId: string;
   members: string[];

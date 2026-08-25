@@ -41,6 +41,7 @@ export interface AlbumInput {
   title: string;
   description?: string;
   coverPhotoURL?: string;
+  coverTone?: 'dark' | 'light';
   eventDate?: string;
   privacy?: 'invite' | 'link' | 'qr';
 }
@@ -161,4 +162,19 @@ export const invitesApi = {
 export const uploadsApi = {
   uploadBase64: async (base64: string) =>
     (await post<{ url: string }>('/uploads', { base64 })).url,
+
+  /**
+   * Uploads a local image file via multipart and returns its public URL
+   * (e.g. `/uploads/albums/<userId>/cover-<uuid>.png`).
+   */
+  uploadFile: async (file: { uri: string; name?: string; type?: string }) => {
+    const form = new FormData();
+    form.append('photo', {
+      uri: file.uri,
+      name: file.name ?? 'cover.jpg',
+      type: file.type ?? 'image/jpeg',
+    } as unknown as Blob);
+    const { url } = await apiFormData<{ url: string }>('/uploads', form);
+    return url;
+  },
 };

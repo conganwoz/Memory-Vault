@@ -10,6 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import {
   ChevronLeft,
   Heart,
@@ -67,6 +68,7 @@ export default function PhotoViewerScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.root}>
+      <StatusBar style="light" />
       {/* Top controls */}
       <View style={[styles.topControls, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity

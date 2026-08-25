@@ -14,6 +14,7 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import type { RootStackParamList } from '../App';
 import { useFirebase } from '../lib/FirebaseProvider';
+import { resolveAssetUrl } from '../lib/config';
 import { colors, radius } from '../lib/theme';
 import { Avatar, Caption, FloatingNav } from '../lib/ui';
 import type { Album } from '../lib/types';
@@ -106,7 +107,7 @@ export default function HomeScreen({ navigation }: Props) {
 
             <View style={styles.card}>
               <Image
-                source={{ uri: album.coverPhotoURL }}
+                source={{ uri: resolveAssetUrl(album.coverPhotoURL) }}
                 style={styles.coverImage}
               />
               <View style={styles.coverGradientFallback} />

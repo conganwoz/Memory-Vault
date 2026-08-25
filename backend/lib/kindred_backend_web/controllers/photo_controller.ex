@@ -1,12 +1,12 @@
 defmodule KindredWeb.PhotoController do
   @moduledoc """
-  Photo upload, listing, reactions and deletion.
+  Photo upload, listing, reactions, trash and deletion.
 
   Access rules mirror the web app's Firestore rules:
   * list   → members only
   * create → members only
   * react  → members only
-  * delete → uploader or album owner
+  * delete/restore (trash) → uploader or album owner
   """
 
   use KindredWeb, :controller
@@ -17,15 +17,18 @@ defmodule KindredWeb.PhotoController do
 
   action_fallback KindredWeb.FallbackController
 
-  @doc "GET /api/albums/:id/photos"
-  def index(conn, %{"id" => album_id}) do
+  @doc "GET /api/albums/:id/photos (?deleted=true lists the trash)"
+  def index(conn, %{"id" => album_id} = params) do
     user = Pipeline.current_resource(conn)
 
     with %Albums.Album{} = album <- Albums.get_album(album_id),
          true <- Albums.member?(album, user.id) do
       photos =
-        album_id
-        |> Albums.list_photos()
+        if params["deleted"] == "true" do
+          Albums.list_deleted_photos(album_id)
+        else
+          Albums.list_photos(album_id)
+        end
         |> Enum.map(&Albums.photo_to_map/1)
 
       json(conn, %{photos: photos})
@@ -78,15 +81,30 @@ defmodule KindredWeb.PhotoController do
     end
   end
 
-  @doc "DELETE /api/photos/:id"
+  @doc "DELETE /api/photos/:id — soft-deletes into the album trash (7-day grace)."
   def delete(conn, %{"id" => id}) do
     user = Pipeline.current_resource(conn)
 
     with %Albums.Photo{} = photo <- Albums.get_photo(id),
          %Albums.Album{} = album <- Albums.get_album(photo.album_id),
-         true <- can_delete?(photo, album, user),
-         {:ok, _photo} <- Albums.delete_photo(photo) do
+         true <- can_moderate?(photo, album, user),
+         {:ok, _photo} <- Albums.soft_delete_photo(photo) do
       send_resp(conn, :no_content, "")
+    else
+      nil -> {:error, :not_found}
+      false -> {:error, :forbidden}
+    end
+  end
+
+  @doc "POST /api/photos/:id/restore — brings a trashed photo back to the album."
+  def restore(conn, %{"id" => id}) do
+    user = Pipeline.current_resource(conn)
+
+    with %Albums.Photo{} = photo <- Albums.get_photo(id),
+         %Albums.Album{} = album <- Albums.get_album(photo.album_id),
+         true <- can_moderate?(photo, album, user),
+         {:ok, photo} <- Albums.restore_photo(photo) do
+      json(conn, %{photo: Albums.photo_to_map(photo)})
     else
       nil -> {:error, :not_found}
       false -> {:error, :forbidden}
@@ -107,7 +125,7 @@ defmodule KindredWeb.PhotoController do
   defp parse_delta(value) when value in [-1, "-1"], do: -1
   defp parse_delta(_), do: :invalid
 
-  defp can_delete?(photo, album, user) do
+  defp can_moderate?(photo, album, user) do
     photo.uploader_id == user.id || album.owner_id == user.id
   end
 end

@@ -20,6 +20,7 @@ import {
   Camera,
   Upload,
   Heart,
+  Clock,
 } from 'lucide-react-native';
 import { format } from 'date-fns';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -44,14 +45,19 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
   const album: Album | undefined = albums.find((a) => a.id === albumId);
 
   const [photos, setPhotos] = useState<Photo[]>([]);
+  const [deletedPhotos, setDeletedPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Fetch photos from the backend each time the screen gains focus (covers
   // returning from Upload / Camera / PhotoViewer) and on first mount.
   const loadPhotos = useCallback(async () => {
     try {
-      const list = await photosApi.list(albumId);
+      const [list, deleted] = await Promise.all([
+        photosApi.list(albumId),
+        photosApi.list(albumId, { deleted: true }),
+      ]);
       setPhotos(list);
+      setDeletedPhotos(deleted);
     } catch (error) {
       console.warn('Failed to load photos:', error);
     } finally {
@@ -153,6 +159,16 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
     }
     return Object.entries(grouped);
   }, [photos]);
+
+  // Trash is only manageable by the album owner or the uploaders of the
+  // trashed photos (the server enforces the same rule on delete/restore).
+  const canModerateTrash = useMemo(() => {
+    if (!user || !album) return false;
+    return (
+      album.ownerId === user.userId ||
+      deletedPhotos.some((p) => p.uploaderId === user.userId)
+    );
+  }, [user, album, deletedPhotos]);
 
   if (!album) {
     return (
@@ -285,53 +301,100 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
           <View style={styles.loadingWrap}>
             <Spinner />
           </View>
-        ) : photos.length === 0 ? (
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyText}>
-              {'Every memory starts with a single photo.\nTap the button below to add yours.'}
-            </Text>
-          </View>
         ) : (
-          sections.map(([label, sectionPhotos]) => (
-            <View key={label} style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionBadge}>
-                  <Caption>{label}</Caption>
+          <>
+            {/* Recently deleted — only the owner or the uploaders can restore */}
+            {canModerateTrash && deletedPhotos.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionBadge}>
+                    <Caption>Recently deleted</Caption>
+                  </View>
+                  <Text style={styles.trashNote}>
+                    {'Kept for 7 days, then permanently removed. Tap a photo to restore it.'}
+                  </Text>
                 </View>
-              </View>
 
-              <View style={styles.grid}>
-                {sectionPhotos.map((photo, pIndex) => {
-                  const tall = pIndex % 3 === 0;
-                  const offsetDown = pIndex % 4 === 1;
-                  return (
+                <View style={styles.grid}>
+                  {deletedPhotos.map((photo, pIndex) => (
                     <TouchableOpacity
                       key={photo.id}
-                      activeOpacity={0.92}
+                      activeOpacity={0.9}
                       onPress={() =>
-                        navigation.navigate('PhotoViewer', { photo })
+                        navigation.navigate('PhotoViewer', {
+                          photo,
+                          albumOwnerId: album.ownerId,
+                        })
                       }
                       style={[
                         styles.photoCell,
-                        tall ? styles.photoCellTall : styles.photoCellShort,
-                        offsetDown && styles.photoCellOffset,
+                        pIndex % 3 === 0 ? styles.photoCellTall : styles.photoCellShort,
                       ]}
                     >
                       <Image source={{ uri: resolveAssetUrl(photo.url) }} style={styles.photoImage} />
-                      {(photo.reactions?.heart ?? 0) > 0 && (
-                        <View style={styles.reactionChip}>
-                          <Heart width={10} height={10} color={colors.white} fill={colors.white} />
-                          <Text style={styles.reactionCount}>
-                            {photo.reactions.heart}
-                          </Text>
-                        </View>
-                      )}
+                      <View style={styles.trashDim} />
+                      <View style={styles.trashChip}>
+                        <Clock width={10} height={10} color={colors.white} />
+                        <Text style={styles.trashChipText}>TRASH</Text>
+                      </View>
                     </TouchableOpacity>
-                  );
-                })}
+                  ))}
+                </View>
               </View>
-            </View>
-          ))
+            )}
+
+            {photos.length === 0 ? (
+              <View style={styles.emptyWrap}>
+                <Text style={styles.emptyText}>
+                  {'Every memory starts with a single photo.\nTap the button below to add yours.'}
+                </Text>
+              </View>
+            ) : (
+              sections.map(([label, sectionPhotos]) => (
+                <View key={label} style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <View style={styles.sectionBadge}>
+                      <Caption>{label}</Caption>
+                    </View>
+                  </View>
+
+                  <View style={styles.grid}>
+                    {sectionPhotos.map((photo, pIndex) => {
+                      const tall = pIndex % 3 === 0;
+                      const offsetDown = pIndex % 4 === 1;
+                      return (
+                        <TouchableOpacity
+                          key={photo.id}
+                          activeOpacity={0.92}
+                          onPress={() =>
+                            navigation.navigate('PhotoViewer', {
+                              photo,
+                              albumOwnerId: album.ownerId,
+                            })
+                          }
+                          style={[
+                            styles.photoCell,
+                            tall ? styles.photoCellTall : styles.photoCellShort,
+                            offsetDown && styles.photoCellOffset,
+                          ]}
+                        >
+                          <Image source={{ uri: resolveAssetUrl(photo.url) }} style={styles.photoImage} />
+                          {(photo.reactions?.heart ?? 0) > 0 && (
+                            <View style={styles.reactionChip}>
+                              <Heart width={10} height={10} color={colors.white} fill={colors.white} />
+                              <Text style={styles.reactionCount}>
+                                {photo.reactions.heart}
+                              </Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))
+            )}
+          </>
         )}
       </Animated.ScrollView>
 
@@ -566,6 +629,35 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 10,
     fontWeight: '700',
+  },
+  trashNote: {
+    marginTop: 10,
+    fontSize: 12,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    color: 'rgba(45,45,45,0.45)',
+  },
+  trashDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(45,45,45,0.45)',
+  },
+  trashChip: {
+    position: 'absolute',
+    left: 10,
+    bottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  trashChipText: {
+    color: colors.white,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.5,
   },
 
   fabColumn: {

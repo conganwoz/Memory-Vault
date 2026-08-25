@@ -22,6 +22,7 @@ defmodule Kindred.Albums.Photo do
     field :type, :string, default: "photo"
     field :reactions, :map, default: %{"heart" => 0}
     field :timestamp_label, :string, default: "Moments"
+    field :deleted_at, :utc_datetime
 
     timestamps(type: :utc_datetime)
   end
@@ -37,7 +38,8 @@ defmodule Kindred.Albums.Photo do
       :caption,
       :type,
       :reactions,
-      :timestamp_label
+      :timestamp_label,
+      :deleted_at
     ])
     |> validate_required([:album_id, :uploader_id, :uploader_name, :url, :type])
     |> validate_inclusion(:type, ~w(photo video))

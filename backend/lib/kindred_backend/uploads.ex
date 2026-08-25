@@ -80,6 +80,35 @@ defmodule Kindred.Uploads do
   defp detect_ext(<<"RIFF", _::binary-size(4), "WEBP">>), do: ".webp"
   defp detect_ext(_), do: ".jpg"
 
+  @doc """
+  Deletes an uploaded file referenced by its public URL.
+
+  Only `/uploads/...` URLs that resolve inside the configured uploads
+  directory are touched — remote URLs, data URIs and path traversal attempts
+  are left alone. A missing file is not an error. Always returns `:ok`.
+  """
+  def delete_file(url) when is_binary(url) do
+    with %URI{path: path} when is_binary(path) <- URI.parse(url),
+         true <- String.starts_with?(path, "/uploads/") do
+      root = uploads_root() |> Path.expand()
+      absolute = path |> String.trim_leading("/uploads/") |> Path.join(root) |> Path.expand()
+
+      if absolute == root or String.starts_with?(absolute, root <> "/") do
+        case File.rm(absolute) do
+          :ok -> :ok
+          {:error, :enoent} -> :ok
+          {:error, _} -> :ok
+        end
+      else
+        :ok
+      end
+    else
+      _ -> :ok
+    end
+  end
+
+  def delete_file(_), do: :ok
+
   defp upload_dir(album_id), do: Path.join(uploads_root(), "albums/#{album_id}")
   defp public_url(album_id, file_name), do: "/uploads/albums/#{album_id}/#{file_name}"
 

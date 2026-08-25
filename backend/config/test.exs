@@ -23,6 +23,9 @@ config :kindred_backend, KindredWeb.Endpoint,
 # Print only warnings and errors during test
 config :logger, level: :warning
 
+# Never fire the photo-trash purge during tests (sandboxed DB, short runtime).
+config :kindred_backend, :purge_interval, :timer.hours(24 * 30)
+
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
 

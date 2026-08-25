@@ -84,6 +84,25 @@ defmodule KindredWeb.PhotoControllerTest do
       assert %{"photos" => [%{"id" => id}]} = json_response(conn, 200)
       assert id == photo.id
     end
+
+    test "hides trashed photos by default and lists them with ?deleted=true", %{
+      conn: conn,
+      owner: owner,
+      album: album
+    } do
+      {:ok, active} = Kindred.Albums.create_photo(album, owner, %{url: "/uploads/a.jpg"})
+      {:ok, trashed} = Kindred.Albums.create_photo(album, owner, %{url: "/uploads/b.jpg"})
+      {:ok, _} = Kindred.Albums.soft_delete_photo(trashed)
+
+      conn = conn |> Fixtures.auth_conn(owner) |> get("/api/albums/#{album.id}/photos")
+      assert %{"photos" => [%{"id" => id}]} = json_response(conn, 200)
+      assert id == active.id
+
+      conn = get(conn, "/api/albums/#{album.id}/photos?deleted=true")
+      assert %{"photos" => [%{"id" => tid, "deletedAt" => deleted_at}]} = json_response(conn, 200)
+      assert tid == trashed.id
+      refute is_nil(deleted_at)
+    end
   end
 
   describe "POST /api/photos/:id/reactions" do
@@ -111,13 +130,30 @@ defmodule KindredWeb.PhotoControllerTest do
   end
 
   describe "DELETE /api/photos/:id" do
-    test "the uploader can delete their photo", %{conn: conn, owner: owner, album: album} do
+    test "the uploader can soft-delete their photo", %{conn: conn, owner: owner, album: album} do
       {:ok, photo} = Kindred.Albums.create_photo(album, owner, %{url: "/uploads/a.jpg"})
       conn = conn |> Fixtures.auth_conn(owner) |> delete("/api/photos/#{photo.id}")
 
       assert response(conn, 204)
-      assert Kindred.Albums.get_photo(photo.id) == nil
+
+      # Soft delete: the row survives in the trash with a deletedAt stamp.
+      deleted = Kindred.Albums.get_photo(photo.id)
+      assert deleted.deleted_at != nil
       assert Kindred.Albums.get_album!(album.id).photo_count == 0
+    end
+
+    test "the album owner can delete another member's photo", %{
+      conn: conn,
+      owner: owner,
+      album: album
+    } do
+      member = Fixtures.user()
+      {:ok, _} = Kindred.Albums.add_member(album, member.email)
+      {:ok, photo} = Kindred.Albums.create_photo(album, member, %{url: "/uploads/a.jpg"})
+
+      conn = conn |> Fixtures.auth_conn(owner) |> delete("/api/photos/#{photo.id}")
+      assert response(conn, 204)
+      assert Kindred.Albums.get_photo(photo.id).deleted_at != nil
     end
 
     test "a stranger cannot delete someone else's photo", %{
@@ -128,6 +164,62 @@ defmodule KindredWeb.PhotoControllerTest do
       {:ok, photo} = Kindred.Albums.create_photo(album, owner, %{url: "/uploads/a.jpg"})
       stranger = Fixtures.user()
       conn = conn |> Fixtures.auth_conn(stranger) |> delete("/api/photos/#{photo.id}")
+      assert %{"errors" => _} = json_response(conn, 403)
+    end
+
+    test "re-deleting a trashed photo keeps the original deleted_at", %{
+      conn: conn,
+      owner: owner,
+      album: album
+    } do
+      {:ok, photo} = Kindred.Albums.create_photo(album, owner, %{url: "/uploads/a.jpg"})
+      {:ok, _} = Kindred.Albums.soft_delete_photo(photo, ~U[2026-01-01 00:00:00Z])
+
+      conn = conn |> Fixtures.auth_conn(owner) |> delete("/api/photos/#{photo.id}")
+      assert response(conn, 204)
+      assert Kindred.Albums.get_photo(photo.id).deleted_at == ~U[2026-01-01 00:00:00Z]
+    end
+  end
+
+  describe "POST /api/photos/:id/restore" do
+    test "brings a trashed photo back and bumps photoCount", %{
+      conn: conn,
+      owner: owner,
+      album: album
+    } do
+      {:ok, photo} = Kindred.Albums.create_photo(album, owner, %{url: "/uploads/a.jpg"})
+      {:ok, _} = Kindred.Albums.soft_delete_photo(photo)
+
+      conn = conn |> Fixtures.auth_conn(owner) |> post("/api/photos/#{photo.id}/restore")
+      assert %{"photo" => restored} = json_response(conn, 200)
+      assert restored["id"] == photo.id
+      assert is_nil(restored["deletedAt"])
+      assert Kindred.Albums.get_album!(album.id).photo_count == 1
+    end
+
+    test "restoring an active photo is a harmless no-op", %{
+      conn: conn,
+      owner: owner,
+      album: album
+    } do
+      {:ok, photo} = Kindred.Albums.create_photo(album, owner, %{url: "/uploads/a.jpg"})
+
+      conn = conn |> Fixtures.auth_conn(owner) |> post("/api/photos/#{photo.id}/restore")
+      assert %{"photo" => %{"id" => id}} = json_response(conn, 200)
+      assert id == photo.id
+    end
+
+    test "a member who is neither uploader nor owner cannot restore", %{
+      conn: conn,
+      owner: owner,
+      album: album
+    } do
+      member = Fixtures.user()
+      {:ok, _} = Kindred.Albums.add_member(album, member.email)
+      {:ok, photo} = Kindred.Albums.create_photo(album, owner, %{url: "/uploads/a.jpg"})
+      {:ok, _} = Kindred.Albums.soft_delete_photo(photo)
+
+      conn = conn |> Fixtures.auth_conn(member) |> post("/api/photos/#{photo.id}/restore")
       assert %{"errors" => _} = json_response(conn, 403)
     end
   end

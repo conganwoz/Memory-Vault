@@ -32,6 +32,8 @@ export interface Photo {
   createdAt: string;
   reactions: Record<string, number>;
   timestampLabel: string;
+  /** Set while the photo sits in the album trash (auto-permanently deleted after 7 days). */
+  deletedAt?: string;
 }
 
 export interface Recap {

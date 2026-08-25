@@ -10,6 +10,7 @@ defmodule Kindred.Application do
     children = [
       KindredWeb.Telemetry,
       Kindred.Repo,
+      Kindred.Photos.Purger,
       {DNSCluster, query: Application.get_env(:kindred_backend, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Kindred.PubSub},
       # Start a worker by calling: Kindred.Worker.start_link(arg)

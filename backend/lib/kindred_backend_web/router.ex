@@ -52,6 +52,7 @@ defmodule KindredWeb.Router do
     post "/albums/:id/photos", PhotoController, :create
     post "/photos/:id/reactions", PhotoController, :react
     delete "/photos/:id", PhotoController, :delete
+    post "/photos/:id/restore", PhotoController, :restore
 
     # Recaps
     post "/albums/:id/recaps/generate", RecapController, :generate

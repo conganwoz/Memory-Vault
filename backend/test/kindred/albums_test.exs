@@ -85,13 +85,60 @@ defmodule Kindred.AlbumsTest do
       assert photo.reactions["heart"] == 0
     end
 
-    test "delete_photo removes the photo and decrements photo_count" do
+    test "soft_delete_photo hides the photo and decrements photo_count once" do
       user = Fixtures.user()
       {:ok, album} = Albums.create_album(%{title: "Trip", owner_id: user.id})
       {:ok, photo} = Albums.create_photo(album, user, %{url: "/uploads/a.jpg"})
 
-      assert {:ok, _} = Albums.delete_photo(photo)
-      assert Albums.get_photo(photo.id) == nil
+      assert {:ok, deleted} = Albums.soft_delete_photo(photo)
+      refute is_nil(deleted.deleted_at)
+      # still present (not hard-deleted), but no longer listed
+      assert Albums.get_photo(photo.id) != nil
+      assert Albums.list_photos(album.id) == []
+      assert [deleted] = Albums.list_deleted_photos(album.id)
+      assert deleted.id == photo.id
+      assert Fixtures.reload(album).photo_count == 0
+
+      # Re-deleting keeps the original deleted_at — the 7-day clock never resets.
+      assert {:ok, again} = Albums.soft_delete_photo(deleted, ~U[2030-01-01 00:00:00Z])
+      assert again.deleted_at == deleted.deleted_at
+    end
+
+    test "restore_photo brings the photo back and restores photo_count" do
+      user = Fixtures.user()
+      {:ok, album} = Albums.create_album(%{title: "Trip", owner_id: user.id})
+      {:ok, photo} = Albums.create_photo(album, user, %{url: "/uploads/a.jpg"})
+      {:ok, _} = Albums.soft_delete_photo(photo)
+
+      assert {:ok, restored} = Albums.restore_photo(photo)
+      assert is_nil(restored.deleted_at)
+      assert [%{id: id}] = Albums.list_photos(album.id)
+      assert id == photo.id
+      assert Albums.list_deleted_photos(album.id) == []
+      assert Fixtures.reload(album).photo_count == 1
+
+      # Restoring an active photo is a harmless no-op.
+      assert {:ok, %{deleted_at: nil}} = Albums.restore_photo(restored)
+    end
+
+    test "purge_expired_photos permanently removes photos past the grace period" do
+      user = Fixtures.user()
+      {:ok, album} = Albums.create_album(%{title: "Trip", owner_id: user.id})
+      {:ok, expired} = Albums.create_photo(album, user, %{url: "/uploads/expired.jpg"})
+      {:ok, recent} = Albums.create_photo(album, user, %{url: "/uploads/recent.jpg"})
+
+      {:ok, _} =
+        Albums.soft_delete_photo(expired, DateTime.add(DateTime.utc_now(), -8 * 24 * 60 * 60))
+
+      {:ok, _} =
+        Albums.soft_delete_photo(recent, DateTime.add(DateTime.utc_now(), -1 * 24 * 60 * 60))
+
+      assert Albums.purge_expired_photos() == 1
+      assert Albums.get_photo(expired.id) == nil
+      assert Albums.get_photo(recent.id) != nil
+
+      # photo_count is not touched by the purge (it was already decremented at
+      # soft-delete time), so it still reflects only the surviving photo.
       assert Fixtures.reload(album).photo_count == 0
     end
   end

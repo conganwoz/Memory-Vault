@@ -71,8 +71,13 @@ export const albumsApi = {
 // ---------------------------------------------------------------------------
 
 export const photosApi = {
-  list: async (albumId: string) =>
-    (await get<{ photos: Photo[] }>(`/albums/${albumId}/photos`)).photos,
+  /** Lists an album's photos. Pass `{ deleted: true }` to list the trash instead. */
+  list: async (albumId: string, opts?: { deleted?: boolean }) =>
+    (
+      await get<{ photos: Photo[] }>(
+        `/albums/${albumId}/photos${opts?.deleted ? '?deleted=true' : ''}`
+      )
+    ).photos,
 
   /** Uploads a photo from a base64 payload (small/medium images). */
   create: async (
@@ -119,7 +124,12 @@ export const photosApi = {
   react: async (photoId: string, heart: 1 | -1) =>
     (await post<{ photo: Photo }>(`/photos/${photoId}/reactions`, { heart })).photo,
 
+  /** Soft-deletes a photo into the album trash (permanently removed after 7 days). */
   remove: async (photoId: string) => del<void>(`/photos/${photoId}`),
+
+  /** Restores a trashed photo back to the album. */
+  restore: async (photoId: string) =>
+    (await post<{ photo: Photo }>(`/photos/${photoId}/restore`)).photo,
 };
 
 // ---------------------------------------------------------------------------

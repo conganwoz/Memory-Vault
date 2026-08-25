@@ -16,7 +16,9 @@ import {
   Heart,
   MessageCircle,
   MoreHorizontal,
+  RotateCcw,
   Share2,
+  Trash2,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -24,16 +26,24 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../App';
 import { photosApi } from '../lib/api/endpoints';
 import { resolveAssetUrl } from '../lib/config';
+import { useFirebase } from '../lib/FirebaseProvider';
 import { colors, radius } from '../lib/theme';
 import { Avatar } from '../lib/ui';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PhotoViewer'>;
 
 export default function PhotoViewerScreen({ route, navigation }: Props) {
-  const { photo } = route.params;
+  const { photo, albumOwnerId } = route.params;
   const insets = useSafeAreaInsets();
+  const { user } = useFirebase();
   const [liked, setLiked] = useState(false);
   const [imageRatio, setImageRatio] = useState<number | null>(null);
+
+  // Only the photo's uploader or the album creator may delete / restore it.
+  const canModerate =
+    !!user &&
+    (user.userId === photo.uploaderId || user.userId === albumOwnerId);
+  const isDeleted = !!photo.deletedAt;
 
   // Show the photo at its real aspect ratio (no distortion, no forced square).
   useEffect(() => {
@@ -83,10 +93,64 @@ export default function PhotoViewerScreen({ route, navigation }: Props) {
   };
 
   const showMore = () => {
-    Alert.alert(photo.uploaderName, photo.timestampLabel || 'Shared moment', [
-      { text: 'Share photo', onPress: sharePhoto },
+    const options: Array<{
+      text: string;
+      onPress?: () => void;
+      style?: 'default' | 'cancel' | 'destructive';
+    }> = [{ text: 'Share photo', onPress: sharePhoto }];
+
+    if (canModerate && isDeleted) {
+      options.push({ text: 'Restore photo', onPress: confirmRestore });
+    } else if (canModerate) {
+      options.push({ text: 'Delete photo', style: 'destructive', onPress: confirmDelete });
+    }
+    options.push({ text: 'Cancel', style: 'cancel' });
+
+    Alert.alert(photo.uploaderName, photo.timestampLabel || 'Shared moment', options);
+  };
+
+  const confirmDelete = () => {
+    Alert.alert(
+      'Delete this photo?',
+      'It moves to the album trash and is permanently removed after 7 days. You can restore it anytime before then.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => void deletePhoto() },
+      ]
+    );
+  };
+
+  const deletePhoto = async () => {
+    try {
+      await photosApi.remove(photo.id);
+      navigation.goBack();
+    } catch (error) {
+      console.warn('Failed to delete photo:', error);
+      Alert.alert(
+        'Could not delete photo',
+        error instanceof Error ? error.message : 'Please try again.'
+      );
+    }
+  };
+
+  const confirmRestore = () => {
+    Alert.alert('Restore this photo?', 'It will reappear in the album for everyone.', [
       { text: 'Cancel', style: 'cancel' },
+      { text: 'Restore', onPress: () => void restorePhoto() },
     ]);
+  };
+
+  const restorePhoto = async () => {
+    try {
+      await photosApi.restore(photo.id);
+      navigation.goBack();
+    } catch (error) {
+      console.warn('Failed to restore photo:', error);
+      Alert.alert(
+        'Could not restore photo',
+        error instanceof Error ? error.message : 'Please try again.'
+      );
+    }
   };
 
   return (
@@ -109,6 +173,19 @@ export default function PhotoViewerScreen({ route, navigation }: Props) {
           >
             <Share2 width={18} height={18} color={colors.white} />
           </TouchableOpacity>
+          {canModerate && (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={isDeleted ? confirmRestore : confirmDelete}
+              style={styles.glassButton}
+            >
+              {isDeleted ? (
+                <RotateCcw width={18} height={18} color={colors.peach} />
+              ) : (
+                <Trash2 width={18} height={18} color={colors.white} />
+              )}
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={showMore}
@@ -118,6 +195,13 @@ export default function PhotoViewerScreen({ route, navigation }: Props) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Trash badge for photos in the 7-day grace window */}
+      {isDeleted && (
+        <View style={[styles.deletedBadge, { top: insets.top + 68 }]} pointerEvents="none">
+          <Text style={styles.deletedBadgeText}>IN TRASH — RESTORES FOR 7 DAYS</Text>
+        </View>
+      )}
 
       {/* The photo */}
       <ScrollView
@@ -222,6 +306,26 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  deletedBadge: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    alignItems: 'center',
+    zIndex: 5,
+  },
+  deletedBadgeText: {
+    color: colors.white,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(45,45,45,0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    overflow: 'hidden',
   },
   imageScroll: {
     flexGrow: 1,

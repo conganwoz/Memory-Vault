@@ -21,7 +21,8 @@ COMPOSE := docker compose
 .PHONY: help deps db-create db-migrate db-seed db-reset migration setup dev \
         compile test format format-check check release all \
         docker-env docker-build docker-up docker-down docker-down-clean \
-        docker-ps docker-logs docker-restart docker-shell docker-migrate docker-seed
+        docker-ps docker-logs docker-restart docker-watch docker-shell \
+        docker-migrate docker-seed
 
 # ---------------------------------------------------------------------------
 # Local (non-Docker) development
@@ -106,6 +107,9 @@ docker-logs: ## Tail the backend logs
 
 docker-restart: ## Restart the backend service
 	$(COMPOSE) restart backend
+
+docker-watch: ## Watch backend sources; rebuild + restart the container on change
+	$(COMPOSE) watch backend
 
 docker-shell: ## Open a shell inside the backend container
 	$(COMPOSE) exec backend sh

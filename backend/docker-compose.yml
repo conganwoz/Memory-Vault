@@ -55,6 +55,19 @@ services:
       start_period: 20s
       retries: 5
 
+    # Auto-reload in development: `docker compose watch` (or `make docker-watch`)
+    # rebuilds this image and restarts the container whenever backend source,
+    # migration, or config files change. Restarts re-run the entrypoint, so
+    # pending migrations are applied automatically.
+    develop:
+      watch:
+        - path: ./lib
+          action: rebuild
+        - path: ./priv
+          action: rebuild
+        - path: ./config
+          action: rebuild
+
   # ---------------------------------------------------------------------------
   # Future services (e.g. a worker, cron, or image-processing service) can be
   # added here and share this network automatically.

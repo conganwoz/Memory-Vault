@@ -89,6 +89,27 @@ docker compose down           # stop (keeps volumes)
 docker compose down -v        # stop and delete data
 ```
 
+### Auto-reload backend code on edit
+
+Compose's file watcher rebuilds and restarts the backend whenever an Elixir
+source, migration, or config file changes — so you never run stale code in the
+container again:
+
+```bash
+make docker-watch      # or: docker compose watch backend
+```
+
+Run it in a dedicated terminal (it stays in the foreground). On every change
+under `lib/`, `priv/`, or `config/` it:
+
+1. rebuilds the backend image (deps stay cached, so this is fast),
+2. recreates the container — which re-runs the entrypoint and therefore
+   **applies any pending DB migrations automatically**,
+3. waits for the next change.
+
+Note that `docker compose watch` is a dev-time tool — it has no effect on a
+plain `docker compose up`, and deployments still use the rebuilt image as usual.
+
 Secrets are read from `.env` (see `.env.example`): `SECRET_KEY_BASE`,
 `GUARDIAN_SECRET_KEY`, `GEMINI_API_KEY`, `GOOGLE_CLIENT_IDS`, `CORS_ORIGIN`.
 

@@ -8,6 +8,7 @@ import {
   Alert,
   Linking,
   Animated,
+  ScrollView,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
@@ -28,6 +29,7 @@ import { photosApi } from '../lib/api/endpoints';
 import { useFirebase } from '../lib/FirebaseProvider';
 import { resolveAssetUrl } from '../lib/config';
 import { colors, radius } from '../lib/theme';
+import { FILTERS, applyPhotoFilter, type PhotoFilter } from '../lib/photoFilters';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Camera'>;
 
@@ -45,6 +47,10 @@ export default function CameraScreen({ route, navigation }: Props) {
   const [lastShotUri, setLastShotUri] = useState<string | null>(null);
   const [uploadQueue, setUploadQueue] = useState(0);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [filter, setFilter] = useState<PhotoFilter>(FILTERS[0]);
+  const [processingFilterLabel, setProcessingFilterLabel] = useState<string | null>(null);
+  // Serializes filter processing + uploads so heavy jpeg-js work never overlaps.
+  const processingChain = useRef<Promise<void>>(Promise.resolve());
 
   // Shutter + flash animations.
   const shutterScale = useRef(new Animated.Value(1)).current;
@@ -95,8 +101,10 @@ export default function CameraScreen({ route, navigation }: Props) {
       if (photo?.uri) setLastShotUri(photo.uri);
       setUploadQueue((q) => q + 1);
 
-      // Upload in the background so rapid captures stay snappy.
-      void uploadMemory(photo);
+      // Serialize processing + uploads (rapid captures queue up cleanly).
+      processingChain.current = processingChain.current
+        .then(() => uploadMemory(photo, filter))
+        .catch((error) => console.warn('Capture chain error:', error));
     } catch (error) {
       console.error('Capture failed:', error);
     } finally {
@@ -104,25 +112,37 @@ export default function CameraScreen({ route, navigation }: Props) {
     }
   };
 
-  const uploadMemory = async (photo: { base64?: string; uri?: string }) => {
+  const uploadMemory = async (
+    photo: { base64?: string; uri?: string },
+    selectedFilter: PhotoFilter
+  ) => {
     if (!user) return;
     try {
       if (!photo.uri) {
         throw new Error('Camera capture returned no image data.');
       }
 
-      // Stream the captured file to the backend (stores + serves it).
-      await photosApi.uploadFile(
-        albumId,
-        { uri: photo.uri, name: `capture-${Date.now()}.jpg`, type: 'image/jpeg' },
-        { timestampLabel: 'Live Capture' }
-      );
+      if (selectedFilter.id !== 'original') {
+        // Bake the artistic filter into a resized copy, upload as base64.
+        setProcessingFilterLabel(selectedFilter.label);
+        const base64 = await applyPhotoFilter(photo.uri, selectedFilter);
+        await photosApi.create(albumId, base64, { timestampLabel: 'Live Capture' });
+      } else {
+        // Stream the original capture to the backend (stores + serves it).
+        await photosApi.uploadFile(
+          albumId,
+          { uri: photo.uri, name: `capture-${Date.now()}.jpg`, type: 'image/jpeg' },
+          { timestampLabel: 'Live Capture' }
+        );
+      }
 
       setUploadQueue((q) => Math.max(0, q - 1));
       setShowConfirmation(true);
     } catch (error) {
       console.warn('Failed to save capture:', error);
       setUploadQueue((q) => Math.max(0, q - 1));
+    } finally {
+      setProcessingFilterLabel(null);
     }
   };
 
@@ -211,6 +231,33 @@ export default function CameraScreen({ route, navigation }: Props) {
 
       <View style={{ flex: 1 }} />
 
+      {/* Artistic filter selector */}
+      <View style={styles.filterWrap}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
+          {FILTERS.map((f) => {
+            const active = filter.id === f.id;
+            return (
+              <TouchableOpacity
+                key={f.id}
+                activeOpacity={0.85}
+                onPress={() => setFilter(f)}
+                style={[styles.filterChip, active && styles.filterChipActive]}
+              >
+                <Text
+                  style={[styles.filterChipText, active && styles.filterChipTextActive]}
+                >
+                  {f.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
       {/* Bottom interface */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom - 8, 8) }]}>
         {/* Upload status pill */}
@@ -220,7 +267,9 @@ export default function CameraScreen({ route, navigation }: Props) {
               <>
                 <Sparkles width={14} height={14} color={colors.peach} fill={colors.peach} />
                 <Text style={styles.statusPillUploading}>
-                  Preserving {uploadQueue} moment{uploadQueue > 1 ? 's' : ''}...
+                  {processingFilterLabel
+                    ? `Applying ${processingFilterLabel}…`
+                    : `Preserving ${uploadQueue} moment${uploadQueue > 1 ? 's' : ''}...`}
                 </Text>
               </>
             ) : (
@@ -366,6 +415,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     alignItems: 'center',
     zIndex: 3,
+  },
+  filterWrap: {
+    zIndex: 3,
+    paddingBottom: 22,
+  },
+  filterRow: {
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  filterChipActive: {
+    backgroundColor: colors.peach,
+    borderColor: colors.peach,
+  },
+  filterChipText: {
+    color: colors.white,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  filterChipTextActive: {
+    color: colors.charcoal,
   },
   statusPill: {
     flexDirection: 'row',

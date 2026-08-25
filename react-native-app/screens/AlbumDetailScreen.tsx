@@ -192,8 +192,12 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
   return (
     <View style={styles.root}>
       {/* Collapsing hero header — pinned at top; contracts vertically + fades */}
-      <View style={styles.headerWrap}>
+      {/* `box-none` / `none` make it a pass-through overlay: taps fall through
+          to the photo grid (except on the actual header buttons), so photos
+          scrolled up under the hero are still tappable. */}
+      <View style={styles.headerWrap} pointerEvents="box-none">
         <Animated.View
+          pointerEvents="box-none"
           style={[
             StyleSheet.absoluteFillObject,
             { transform: [{ translateY: heroTranslateY }], opacity: heroOpacity },
@@ -204,6 +208,7 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
             style={styles.headerImage}
           />
           <LinearGradient
+            pointerEvents="none"
             colors={
               isDarkCover
                 ? ['rgba(253,251,247,0)', 'rgba(45,45,45,0.4)', 'rgba(45,45,45,0.8)']
@@ -214,7 +219,7 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
           />
 
         {/* Top controls */}
-        <View style={[styles.topControls, styles.topControlsSafe]}>
+        <View style={[styles.topControls, styles.topControlsSafe]} pointerEvents="box-none">
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => navigation.goBack()}
@@ -222,7 +227,7 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
           >
             <ChevronLeft width={24} height={24} color={colors.white} />
           </TouchableOpacity>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }} pointerEvents="box-none">
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() => navigation.navigate('Invite', { albumId })}
@@ -241,18 +246,28 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
         </View>
 
         {/* Hero info */}
-        <View style={styles.heroInfo}>
-          <Text style={[styles.heroTitle, isDarkCover && styles.heroTitleDark]}>
+        <View style={styles.heroInfo} pointerEvents="box-none">
+          <Text
+            pointerEvents="none"
+            style={[styles.heroTitle, isDarkCover && styles.heroTitleDark]}
+          >
             {album.title}
           </Text>
-          <Text style={[styles.heroDate, isDarkCover && styles.heroDateDark]}>
+          <Text
+            pointerEvents="none"
+            style={[styles.heroDate, isDarkCover && styles.heroDateDark]}
+          >
             {format(new Date(album.eventDate), 'MMMM d, yyyy')}
           </Text>
 
-          <View style={styles.heroRow}>
-            <View style={styles.membersRow}>
+          <View style={styles.heroRow} pointerEvents="box-none">
+            <View style={styles.membersRow} pointerEvents="box-none">
               {album.members.slice(0, 5).map((member, i) => (
-                <View key={`${member}-${i}`} style={{ marginLeft: i === 0 ? 0 : -12 }}>
+                <View
+                  key={`${member}-${i}`}
+                  pointerEvents="none"
+                  style={{ marginLeft: i === 0 ? 0 : -12 }}
+                >
                   <Avatar
                     uri={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member}`}
                     size={40}
@@ -261,7 +276,7 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
                 </View>
               ))}
               {album.members.length > 5 && (
-                <View style={styles.memberOverflow}>
+                <View style={styles.memberOverflow} pointerEvents="none">
                   <Text style={styles.memberOverflowText}>
                     +{album.members.length - 5}
                   </Text>
@@ -407,6 +422,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+    pointerEvents: 'none',
   },
   topControlsSafe: { paddingTop: 56 },
   topControls: {

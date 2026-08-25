@@ -63,7 +63,9 @@ export default function RecentlyDeletedScreen({ route, navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
+      // Silent refresh on focus (same rationale as AlbumDetail): don't swap
+      // the list for a spinner, which collapses the scroll content and kills
+      // the first scroll gestures after returning from the viewer.
       void load();
     }, [load])
   );

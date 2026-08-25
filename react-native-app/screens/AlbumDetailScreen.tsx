@@ -66,7 +66,10 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
+      // Refetch on focus WITHOUT blanking the list. Swapping in a spinner
+      // collapses the scroll content, clamps the offset to the top, and can
+      // leave the first scroll gestures dead after returning from a viewer.
+      // A silent refresh keeps the grid mounted and scrollable throughout.
       void loadPhotos();
     }, [loadPhotos])
   );

@@ -6,8 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  Alert,
 } from 'react-native';
-import { ChevronLeft, Trash2 } from 'lucide-react-native';
+import { ChevronLeft, RotateCcw, Trash2 } from 'lucide-react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -34,16 +35,22 @@ function daysLeft(deletedAt?: string): number {
 }
 
 export default function RecentlyDeletedScreen({ route, navigation }: Props) {
-  const { albumId } = route.params;
+  const { albumId, albumOwnerId } = route.params;
   const insets = useSafeAreaInsets();
-  const { albums } = useFirebase();
-  const album = albums.find((a) => a.id === albumId);
+  const { user } = useFirebase();
 
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Refetch on every focus so restoring a photo (via the viewer) removes it
-  // from this list right away.
+  // The uploader or the album creator may restore (the server enforces the
+  // same rule). `albumOwnerId` comes from the album screen via route params,
+  // so it is always available here.
+  const canRestore = (photo: Photo) =>
+    !!user &&
+    (user.userId === photo.uploaderId || user.userId === albumOwnerId);
+
+  // Refetch on every focus so restoring a photo removes it from this list
+  // right away.
   const load = useCallback(async () => {
     try {
       setPhotos(await photosApi.list(albumId, { deleted: true }));
@@ -60,6 +67,27 @@ export default function RecentlyDeletedScreen({ route, navigation }: Props) {
       void load();
     }, [load])
   );
+
+  const restorePhoto = async (photo: Photo) => {
+    try {
+      await photosApi.restore(photo.id);
+      setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+      Alert.alert('Photo restored', 'The photo is back in the album.');
+    } catch (error) {
+      console.warn('Failed to restore photo:', error);
+      Alert.alert(
+        'Could not restore photo',
+        error instanceof Error ? error.message : 'Please try again.'
+      );
+    }
+  };
+
+  const confirmRestore = (photo: Photo) => {
+    Alert.alert('Restore this photo?', 'It will reappear in the album for everyone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Restore', onPress: () => void restorePhoto(photo) },
+    ]);
+  };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -103,37 +131,52 @@ export default function RecentlyDeletedScreen({ route, navigation }: Props) {
             {photos.map((photo, pIndex) => {
               const left = daysLeft(photo.deletedAt);
               return (
-                <TouchableOpacity
+                <View
                   key={photo.id}
-                  activeOpacity={0.9}
-                  onPress={() =>
-                    navigation.navigate('PhotoViewer', {
-                      photo,
-                      albumOwnerId: album?.ownerId,
-                    })
-                  }
                   style={[
                     styles.cell,
                     pIndex % 3 === 0 ? styles.cellTall : styles.cellShort,
                   ]}
                 >
-                  <Image
-                    source={{ uri: resolveAssetUrl(photo.url) }}
-                    style={styles.image}
-                  />
-                  <View style={styles.dim} />
-                  <View style={styles.chip}>
+                  <TouchableOpacity
+                    style={styles.cellTouch}
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      navigation.navigate('PhotoViewer', {
+                        photo,
+                        albumOwnerId,
+                        isDeleted: true,
+                      })
+                    }
+                  >
+                    <Image
+                      source={{ uri: resolveAssetUrl(photo.url) }}
+                      style={styles.image}
+                    />
+                    <View style={styles.dim} />
+                  </TouchableOpacity>
+                  <View style={styles.chip} pointerEvents="none">
                     <Trash2 width={10} height={10} color={colors.white} />
                     <Text style={styles.chipText}>
                       {`TRASH · ${left >= 1 ? `${left}d` : '<1d'} left`}
                     </Text>
                   </View>
-                </TouchableOpacity>
+                  {canRestore(photo) && (
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => confirmRestore(photo)}
+                      style={styles.restoreBar}
+                    >
+                      <RotateCcw width={13} height={13} color={colors.charcoal} />
+                      <Text style={styles.restoreBarText}>Restore</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               );
             })}
           </View>
           <Text style={styles.hint}>
-            {'Tap a photo to view it — the owner or the album creator can restore it.'}
+            {'Tap a photo to view it. Restore is available to the photo owner or the album creator.'}
           </Text>
         </ScrollView>
       )}
@@ -230,6 +273,7 @@ const styles = StyleSheet.create({
   },
   cellTall: { height: 240 },
   cellShort: { height: 180 },
+  cellTouch: { flex: 1 },
   image: { width: '100%', height: '100%' },
   dim: {
     ...StyleSheet.absoluteFillObject,
@@ -237,8 +281,8 @@ const styles = StyleSheet.create({
   },
   chip: {
     position: 'absolute',
+    top: 10,
     left: 10,
-    bottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
@@ -252,6 +296,25 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 1.5,
+  },
+  restoreBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.peach,
+  },
+  restoreBarText: {
+    color: colors.charcoal,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
   hint: {
     marginTop: 8,

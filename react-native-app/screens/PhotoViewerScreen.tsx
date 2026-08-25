@@ -33,7 +33,7 @@ import { Avatar } from '../lib/ui';
 type Props = NativeStackScreenProps<RootStackParamList, 'PhotoViewer'>;
 
 export default function PhotoViewerScreen({ route, navigation }: Props) {
-  const { photo, albumOwnerId } = route.params;
+  const { photo, albumOwnerId, isDeleted: isDeletedParam } = route.params;
   const insets = useSafeAreaInsets();
   const { user } = useFirebase();
   const [liked, setLiked] = useState(false);
@@ -43,7 +43,9 @@ export default function PhotoViewerScreen({ route, navigation }: Props) {
   const canModerate =
     !!user &&
     (user.userId === photo.uploaderId || user.userId === albumOwnerId);
-  const isDeleted = !!photo.deletedAt;
+  // Trash screens pass `isDeleted` explicitly, so restore still works even if
+  // an older backend doesn't serialize `deletedAt`.
+  const isDeleted = isDeletedParam ?? !!photo.deletedAt;
 
   // Show the photo at its real aspect ratio (no distortion, no forced square).
   useEffect(() => {
@@ -267,13 +269,24 @@ export default function PhotoViewerScreen({ route, navigation }: Props) {
 
             <View style={{ flex: 1 }} />
 
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={sharePhoto}
-              style={styles.shareFab}
-            >
-              <Text style={styles.shareFabText}>Share</Text>
-            </TouchableOpacity>
+            {isDeleted && canModerate ? (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={confirmRestore}
+                style={styles.restoreFab}
+              >
+                <RotateCcw width={16} height={16} color={colors.charcoal} />
+                <Text style={styles.restoreFabText}>Restore</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={sharePhoto}
+                style={styles.shareFab}
+              >
+                <Text style={styles.shareFabText}>Share</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </LinearGradient>
@@ -392,6 +405,22 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   shareFabText: {
+    color: colors.charcoal,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  restoreFab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.peach,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: radius.pill,
+  },
+  restoreFabText: {
     color: colors.charcoal,
     fontSize: 11,
     fontWeight: '700',

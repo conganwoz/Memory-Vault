@@ -104,13 +104,17 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
     ];
 
     // Only show the trash entry when there is something to restore.
-    if (deletedPhotos.length > 0) {
+    if (album && deletedPhotos.length > 0) {
       options.push({
         text:
           deletedPhotos.length > 1
             ? `Recently deleted (${deletedPhotos.length})`
             : 'Recently deleted',
-        onPress: () => navigation.navigate('RecentlyDeleted', { albumId }),
+        onPress: () =>
+          navigation.navigate('RecentlyDeleted', {
+            albumId,
+            albumOwnerId: album.ownerId,
+          }),
       });
     }
 

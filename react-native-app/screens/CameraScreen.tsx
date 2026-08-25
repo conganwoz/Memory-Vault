@@ -212,7 +212,7 @@ export default function CameraScreen({ route, navigation }: Props) {
       <View style={{ flex: 1 }} />
 
       {/* Bottom interface */}
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom }]}>
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom - 8, 8) }]}>
         {/* Upload status pill */}
         {(uploadQueue > 0 || showConfirmation) && (
           <View style={styles.statusPill}>

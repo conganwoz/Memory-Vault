@@ -15,6 +15,7 @@ import CreateAlbumScreen from './screens/CreateAlbumScreen';
 import AlbumDetailScreen from './screens/AlbumDetailScreen';
 import InviteScreen from './screens/InviteScreen';
 import PhotoViewerScreen from './screens/PhotoViewerScreen';
+import RecentlyDeletedScreen from './screens/RecentlyDeletedScreen';
 import UploadScreen from './screens/UploadScreen';
 import RecapScreen from './screens/RecapScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -29,6 +30,7 @@ export type RootStackParamList = {
   AlbumDetail: { albumId: string };
   Invite: { albumId: string };
   PhotoViewer: { photo: Photo; albumOwnerId?: string };
+  RecentlyDeleted: { albumId: string };
   Upload: { albumId: string };
   Recap: { albumId: string };
   Camera: { albumId: string };
@@ -90,6 +92,7 @@ function RootNavigator() {
               contentStyle: { backgroundColor: colors.charcoal },
             }}
           />
+          <Stack.Screen name="RecentlyDeleted" component={RecentlyDeletedScreen} />
           <Stack.Screen name="Upload" component={UploadScreen} />
           <Stack.Screen
             name="Recap"

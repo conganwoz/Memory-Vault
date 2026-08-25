@@ -20,7 +20,6 @@ import {
   Camera,
   Upload,
   Heart,
-  Clock,
 } from 'lucide-react-native';
 import { format } from 'date-fns';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -104,6 +103,17 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
       },
     ];
 
+    // Only show the trash entry when there is something to restore.
+    if (deletedPhotos.length > 0) {
+      options.push({
+        text:
+          deletedPhotos.length > 1
+            ? `Recently deleted (${deletedPhotos.length})`
+            : 'Recently deleted',
+        onPress: () => navigation.navigate('RecentlyDeleted', { albumId }),
+      });
+    }
+
     // Changing the cover is an owner action (enforced server-side too).
     if (album && user && album.ownerId === user.userId) {
       options.push({
@@ -159,16 +169,6 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
     }
     return Object.entries(grouped);
   }, [photos]);
-
-  // Trash is only manageable by the album owner or the uploaders of the
-  // trashed photos (the server enforces the same rule on delete/restore).
-  const canModerateTrash = useMemo(() => {
-    if (!user || !album) return false;
-    return (
-      album.ownerId === user.userId ||
-      deletedPhotos.some((p) => p.uploaderId === user.userId)
-    );
-  }, [user, album, deletedPhotos]);
 
   if (!album) {
     return (
@@ -303,46 +303,6 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
           </View>
         ) : (
           <>
-            {/* Recently deleted — only the owner or the uploaders can restore */}
-            {canModerateTrash && deletedPhotos.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <View style={styles.sectionBadge}>
-                    <Caption>Recently deleted</Caption>
-                  </View>
-                  <Text style={styles.trashNote}>
-                    {'Kept for 7 days, then permanently removed. Tap a photo to restore it.'}
-                  </Text>
-                </View>
-
-                <View style={styles.grid}>
-                  {deletedPhotos.map((photo, pIndex) => (
-                    <TouchableOpacity
-                      key={photo.id}
-                      activeOpacity={0.9}
-                      onPress={() =>
-                        navigation.navigate('PhotoViewer', {
-                          photo,
-                          albumOwnerId: album.ownerId,
-                        })
-                      }
-                      style={[
-                        styles.photoCell,
-                        pIndex % 3 === 0 ? styles.photoCellTall : styles.photoCellShort,
-                      ]}
-                    >
-                      <Image source={{ uri: resolveAssetUrl(photo.url) }} style={styles.photoImage} />
-                      <View style={styles.trashDim} />
-                      <View style={styles.trashChip}>
-                        <Clock width={10} height={10} color={colors.white} />
-                        <Text style={styles.trashChipText}>TRASH</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            )}
-
             {photos.length === 0 ? (
               <View style={styles.emptyWrap}>
                 <Text style={styles.emptyText}>
@@ -629,35 +589,6 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 10,
     fontWeight: '700',
-  },
-  trashNote: {
-    marginTop: 10,
-    fontSize: 12,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    color: 'rgba(45,45,45,0.45)',
-  },
-  trashDim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(45,45,45,0.45)',
-  },
-  trashChip: {
-    position: 'absolute',
-    left: 10,
-    bottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  trashChipText: {
-    color: colors.white,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1.5,
   },
 
   fabColumn: {

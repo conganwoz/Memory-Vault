@@ -1,0 +1,65 @@
+# Elixir/OTP app in one container, backed by a Postgres service.
+name: kindred
+
+services:
+  # ---------------------------------------------------------------------------
+  # Database
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kindred
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kindred}
+      POSTGRES_DB: kindred_backend
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kindred -d kindred_backend"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Kindred API (Phoenix)
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ecto://kindred:${POSTGRES_PASSWORD:-kindred}@db:5432/kindred_backend
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-dev_secret_key_base_change_me}
+      GUARDIAN_SECRET_KEY: ${GUARDIAN_SECRET_KEY:-dev_guardian_secret_change_me}
+      PHX_HOST: ${PHX_HOST:-localhost}
+      PORT: "4000"
+      PHX_SERVER: "true"
+      # Optional integrations (see README)
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
+      CORS_ORIGIN: "${CORS_ORIGIN:-*}"
+      UPLOADS_DIR: /app/priv/static/uploads
+      SEED_ON_START: ${SEED_ON_START:-false}
+    ports:
+      - "${PORT:-4000}:4000"
+    volumes:
+      # Persist uploaded images across container restarts
+      - uploads:/app/priv/static/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:4000/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Future services (e.g. a worker, cron, or image-processing service) can be
+  # added here and share this network automatically.
+  # ---------------------------------------------------------------------------
+
+volumes:
+  pgdata:
+  uploads:

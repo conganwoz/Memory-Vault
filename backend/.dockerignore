@@ -1,0 +1,19 @@
+# Build context exclusions for the Docker image
+_build/
+deps/
+doc/
+cover/
+.elixir_ls/
+.credo.exs
+.git/
+.gitignore
+.exenv*
+erl_crash.dump
+*.ez
+*.beam
+/config/*.secret.exs
+.elixir/
+node_modules/
+
+# Runtime uploads should NOT be baked into the image
+priv/static/uploads/

@@ -87,9 +87,9 @@ export default function CameraScreen({ route, navigation }: Props) {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.55,
         exif: false,
-        skipProcessing: true,
-        // NOTE: no `base64` — the captured file is uploaded via multipart, so
-        // image bytes never sit in JavaScript memory.
+        // NOTE: processing must NOT be skipped — skipProcessing returns the raw
+        // sensor frame without rotation, producing photos with the wrong
+        // orientation/dimensions (the tall-and-narrow aspect ratio bug).
       });
 
       if (photo?.uri) setLastShotUri(photo.uri);

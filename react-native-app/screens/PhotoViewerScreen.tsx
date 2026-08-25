@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,29 @@ export default function PhotoViewerScreen({ route, navigation }: Props) {
   const { photo } = route.params;
   const insets = useSafeAreaInsets();
   const [liked, setLiked] = useState(false);
+  const [imageRatio, setImageRatio] = useState<number | null>(null);
+
+  // Show the photo at its real aspect ratio (no distortion, no forced square).
+  useEffect(() => {
+    let cancelled = false;
+    const url = resolveAssetUrl(photo.url);
+    if (!url) return;
+
+    Image.getSize(
+      url,
+      (width, height) => {
+        if (!cancelled && width > 0 && height > 0) setImageRatio(width / height);
+      },
+      () => {
+        // Unknown dimensions — fall back to the default (square) container.
+        if (!cancelled) setImageRatio(1);
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [photo.url]);
 
   const toggleLike = async () => {
     const newLiked = !liked;
@@ -103,7 +126,11 @@ export default function PhotoViewerScreen({ route, navigation }: Props) {
         minimumZoomScale={1}
         showsVerticalScrollIndicator={false}
       >
-        <Image source={{ uri: resolveAssetUrl(photo.url) }} style={styles.image} resizeMode="contain" />
+        <Image
+          source={{ uri: resolveAssetUrl(photo.url) }}
+          style={[styles.image, imageRatio ? { aspectRatio: imageRatio } : null]}
+          resizeMode="contain"
+        />
       </ScrollView>
 
       {/* Footer info */}
@@ -203,7 +230,7 @@ const styles = StyleSheet.create({
   },
   image: {
     width: '100%',
-    aspectRatio: 1,
+    aspectRatio: 1, // fallback while the real dimensions load (see imageRatio)
   },
   footerGradient: {
     position: 'absolute',

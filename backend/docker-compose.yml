@@ -35,7 +35,7 @@ services:
       SECRET_KEY_BASE: ${SECRET_KEY_BASE:-dev_secret_key_base_change_me}
       GUARDIAN_SECRET_KEY: ${GUARDIAN_SECRET_KEY:-dev_guardian_secret_change_me}
       PHX_HOST: ${PHX_HOST:-localhost}
-      PORT: "4000"
+      PORT: "4008"
       PHX_SERVER: "true"
       # Optional integrations (see README)
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
@@ -44,12 +44,12 @@ services:
       UPLOADS_DIR: /app/priv/static/uploads
       SEED_ON_START: ${SEED_ON_START:-false}
     ports:
-      - "${PORT:-4000}:4000"
+      - "${PORT:-4008}:4008"
     volumes:
       # Persist uploaded images across container restarts
       - uploads:/app/priv/static/uploads
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:4000/healthz"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:4008/healthz"]
       interval: 10s
       timeout: 5s
       start_period: 20s

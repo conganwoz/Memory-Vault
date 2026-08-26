@@ -3,7 +3,7 @@
 #
 #   make help          show all targets
 #   make setup         deps + database create + migrate (local, non-Docker)
-#   make dev           run the Phoenix dev server (http://localhost:4000)
+#   make dev           run the Phoenix dev server (http://localhost:4008)
 #   make docker-up     build + start the whole stack in containers (db + backend)
 #
 # Local (mix) targets run against your system PostgreSQL. Docker targets run
@@ -57,7 +57,7 @@ migration: ## Generate a migration (usage: make migration NAME=add_foo)
 
 setup: deps db-create db-migrate ## Full local setup (deps + database + migrate)
 
-dev: ## Start the Phoenix dev server on http://localhost:4000
+dev: ## Start the Phoenix dev server on http://localhost:4008
 	$(MIX) phx.server
 
 compile: ## Compile with warnings-as-errors

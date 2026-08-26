@@ -29,7 +29,7 @@ workflow) — or just Docker.
 ```bash
 cd backend
 make setup        # fetch deps + create DB + run migrations
-make dev          # start the Phoenix dev server (http://localhost:4000)
+make dev          # start the Phoenix dev server (http://localhost:4008)
 make test         # run the test suite
 make docker-up    # or run the whole stack in Docker (db + backend)
 ```
@@ -47,7 +47,7 @@ mix run priv/repo/seeds.exs        # optional: demo user amy@kindred.app / kindr
 mix phx.server
 ```
 
-The API is then available at `http://localhost:4000/api`.
+The API is then available at `http://localhost:4008/api`.
 
 > The dev DB config defaults to the local `anluu` Postgres superuser with no
 > password. Override with `DB_USERNAME` / `DB_PASSWORD` / `DB_HOSTNAME`.
@@ -74,7 +74,7 @@ That starts two services:
 
 * On startup the backend **automatically runs migrations** (idempotent), and
   seeds demo data if `SEED_ON_START=true`.
-* API → `http://localhost:4000/api`, health check → `GET /healthz`.
+* API → `http://localhost:4008/api`, health check → `GET /healthz`.
 * Uploaded images and DB data persist in the `uploads` and `pgdata` named
   volumes across restarts (`docker compose down` keeps them; `down -v` deletes).
 
@@ -214,7 +214,7 @@ Point `react-native-app` at this API by replacing the Firebase calls in
 `lib/firebase.ts` / `lib/FirebaseProvider.tsx` with HTTP calls, e.g.:
 
 ```
-baseUrl = "http://<your-machine-ip>:4000/api"
+baseUrl = "http://<your-machine-ip>:4008/api"
 POST /auth/signin  → {token, user}     (store token)
 GET  /albums       → {albums: [...]}
 POST /albums/:id/photos {base64} → {photo: {...}}

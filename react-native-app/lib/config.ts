@@ -8,12 +8,12 @@
  *   2. `expo.extra.apiBaseUrl` in `app.json` → the "config file" for
  *      dev (LAN IP + backend port) and prod (deployed backend URL).
  *   3. Auto-derived from the Expo dev-server host (your machine's LAN IP)
- *      + `expo.extra.apiPort` (default 4000) → dev convenience when
+ *      + `expo.extra.apiPort` (default 4008) → dev convenience when
  *      `apiBaseUrl` is left empty.
- *   4. `http://localhost:4000` fallback.
+ *   4. `http://localhost:4008` fallback.
  *
  * Dev example (in app.json):
- *   "extra": { "apiBaseUrl": "http://192.168.1.51:4000", "apiPort": 4000 }
+ *   "extra": { "apiBaseUrl": "http://192.168.1.51:4008", "apiPort": 4008 }
  */
 import Constants from 'expo-constants';
 
@@ -43,19 +43,19 @@ function deriveLanApiUrl(): string {
     const hostUri = Constants.expoConfig?.hostUri; // e.g. "192.168.1.51:8081"
     const host = hostUri?.split(':')[0]?.trim();
     if (!host || host === 'localhost' || host === '127.0.0.1') return '';
-    const port = extra.apiPort ?? 4000;
+    const port = extra.apiPort ?? 4008;
     return `http://${host}:${port}`;
   } catch {
     return '';
   }
 }
 
-const resolved = (envApiUrl || configApiUrl || deriveLanApiUrl() || 'http://localhost:4000').replace(
+const resolved = (envApiUrl || configApiUrl || deriveLanApiUrl() || 'http://localhost:4008').replace(
   /\/+$/,
   ''
 );
 
-/** Base URL of the Kindred backend, e.g. "http://192.168.1.51:4000". */
+/** Base URL of the Kindred backend, e.g. "http://192.168.1.51:4008". */
 export const API_BASE_URL = resolved;
 
 /** Base URL + `/api` prefix for all JSON API calls. */

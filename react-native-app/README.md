@@ -55,18 +55,18 @@ The API base URL is resolved in `lib/config.ts` with this priority:
    (your machine's LAN IP + the backend port) and prod:
    ```json
    "extra": {
-     "apiBaseUrl": "http://192.168.1.51:4000",
-     "apiPort": 4000
+     "apiBaseUrl": "http://192.168.1.51:4008",
+     "apiPort": 4008
    }
    ```
 3. **Auto-derived from the Expo dev-server host** — when both are empty, the
    app reuses the machine's LAN IP from Expo's `hostUri` and appends
-   `apiPort` (default `4000`). This makes dev over LAN work with zero config.
-4. Fallback: `http://localhost:4000`.
+   `apiPort` (default `4008`). This makes dev over LAN work with zero config.
+4. Fallback: `http://localhost:4008`.
 
 > **Dev over LAN:** run the backend (e.g. `docker compose up` in `../backend`),
 > find your IP (`ipconfig getifaddr en0`), then set `apiBaseUrl` in `app.json`
-> to `http://<your-ip>:4000` and restart `npx expo start -c`. Your phone must
+> to `http://<your-ip>:4008` and restart `npx expo start -c`. Your phone must
 > be on the same Wi-Fi network. Emulator note: Android emulators reach the host
 > via `10.0.2.2`, iOS simulators via `localhost`.
 

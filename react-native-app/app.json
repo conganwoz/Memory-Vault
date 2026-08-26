@@ -48,7 +48,7 @@
       "googleIosClientId": "",
       "googleAndroidClientId": "",
       "apiBaseUrl": "",
-      "apiPort": 4000
+      "apiPort": 4008
     }
   }
 }

@@ -43,7 +43,7 @@ RUN apt-get update -y \
   && rm -rf /var/lib/apt/lists/*
 
 ENV MIX_ENV=prod \
-    PORT=4000 \
+    PORT=4008 \
     PHX_SERVER=true
 
 WORKDIR /app
@@ -55,9 +55,11 @@ COPY --from=build /app/_build/prod/rel/kindred_backend /app
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-EXPOSE 4000
+EXPOSE 4008
 
+# `$$PORT` defers expansion to container runtime so the health check always
+# targets the actual listen port (overridable via the PORT env var).
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=5 \
-  CMD curl -fsS http://127.0.0.1:4000/healthz || exit 1
+  CMD curl -fsS http://127.0.0.1:$$PORT/healthz || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

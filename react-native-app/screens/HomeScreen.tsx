@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { RootStackParamList } from '../App';
 import { useFirebase } from '../lib/FirebaseProvider';
 import { resolveAssetUrl } from '../lib/config';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius } from '../lib/theme';
 import { Avatar, Caption, FloatingNav } from '../lib/ui';
 import type { Album } from '../lib/types';
@@ -30,6 +31,7 @@ function greeting(): string {
 
 export default function HomeScreen({ navigation }: Props) {
   const { user, albums, refreshAlbums } = useFirebase();
+  const insets = useSafeAreaInsets();
 
   // Re-fetch albums whenever Home regains focus (e.g. after creating a vault).
   useFocusEffect(
@@ -44,7 +46,7 @@ export default function HomeScreen({ navigation }: Props) {
   return (
     <View style={styles.root}>
       {/* Header */}
-      <View style={[styles.header, styles.headerSafe]}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <View>
           <Text style={styles.greeting}>{greeting()}</Text>
           <Text style={styles.userName}>
@@ -139,7 +141,6 @@ const CARD_ASPECT = 4 / 5;
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.cream },
-  headerSafe: { paddingTop: 60 },
   header: {
     paddingHorizontal: 32,
     paddingBottom: 16,

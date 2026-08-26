@@ -23,6 +23,7 @@ import type { RootStackParamList } from '../App';
 import { photosApi } from '../lib/api/endpoints';
 import { mapWithConcurrency } from '../lib/api/client';
 import { useFirebase } from '../lib/FirebaseProvider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius } from '../lib/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Upload'>;
@@ -53,6 +54,7 @@ const MAX_CONCURRENT_UPLOADS = 3;
 export default function UploadScreen({ route, navigation }: Props) {
   const { albumId } = route.params;
   const { user } = useFirebase();
+  const insets = useSafeAreaInsets();
 
   const [items, setItems] = useState<PickedItem[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -149,7 +151,7 @@ export default function UploadScreen({ route, navigation }: Props) {
   return (
     <View style={styles.root}>
       {/* Header */}
-      <View style={[styles.header, styles.headerSafe]}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={() => navigation.goBack()}
@@ -276,7 +278,6 @@ export default function UploadScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.cream },
-  headerSafe: { paddingTop: 52 },
   header: {
     paddingHorizontal: 24,
     paddingBottom: 12,

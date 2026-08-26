@@ -3,7 +3,6 @@ import {
   View,
   Text,
   Image,
-  ScrollView,
   TouchableOpacity,
   StyleSheet,
   Animated,
@@ -24,6 +23,7 @@ import {
 import { format } from 'date-fns';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { RootStackParamList } from '../App';
 import { useFirebase } from '../lib/FirebaseProvider';
@@ -38,10 +38,22 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AlbumDetail'>;
 
 const HEADER_HEIGHT = 460;
 
+/** One photo cell inside a virtualized grid row (pattern flags precomputed). */
+interface PhotoCellData {
+  photo: Photo;
+  tall: boolean;
+  offsetDown: boolean;
+}
+
+type GridItem =
+  | { kind: 'header'; label: string }
+  | { kind: 'row'; cells: PhotoCellData[]; sectionEnd: boolean };
+
 export default function AlbumDetailScreen({ route, navigation }: Props) {
   const { albumId } = route.params;
   const { user, albums, refreshAlbums } = useFirebase();
   const album: Album | undefined = albums.find((a) => a.id === albumId);
+  const insets = useSafeAreaInsets();
 
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [deletedPhotos, setDeletedPhotos] = useState<Photo[]>([]);
@@ -177,6 +189,88 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
     return Object.entries(grouped);
   }, [photos]);
 
+  // Virtualized timeline: section headers + rows of 2 photo cells. Chunking the
+  // grid into rows lets the FlatList recycle off-screen rows (large albums stay
+  // smooth and low-memory instead of mounting every image at once).
+  const gridItems = useMemo<GridItem[]>(() => {
+    const items: GridItem[] = [];
+    for (const [label, sectionPhotos] of sections) {
+      items.push({ kind: 'header', label });
+      for (let i = 0; i < sectionPhotos.length; i += 2) {
+        const cells = sectionPhotos.slice(i, i + 2).map((photo, j) => {
+          const pIndex = i + j;
+          return {
+            photo,
+            tall: pIndex % 3 === 0,
+            offsetDown: pIndex % 4 === 1,
+          };
+        });
+        items.push({
+          kind: 'row',
+          cells,
+          sectionEnd: i + 2 >= sectionPhotos.length,
+        });
+      }
+    }
+    return items;
+  }, [sections]);
+
+  const keyForGridItem = useCallback(
+    (item: GridItem) =>
+      item.kind === 'header'
+        ? `header-${item.label}`
+        : `row-${item.cells[0]?.photo.id ?? 'x'}`,
+    []
+  );
+
+  const renderGridItem = useCallback(
+    ({ item }: { item: GridItem }) => {
+      if (item.kind === 'header') {
+        return (
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionBadge}>
+              <Caption>{item.label}</Caption>
+            </View>
+          </View>
+        );
+      }
+      return (
+        <View style={[styles.gridRow, item.sectionEnd && styles.gridRowSectionEnd]}>
+          {item.cells.map((cell) => (
+            <TouchableOpacity
+              key={cell.photo.id}
+              activeOpacity={0.92}
+              onPress={() =>
+                navigation.navigate('PhotoViewer', {
+                  photos,
+                  initialIndex: photos.indexOf(cell.photo),
+                  albumOwnerId: album?.ownerId,
+                })
+              }
+              style={[
+                styles.photoCell,
+                cell.tall ? styles.photoCellTall : styles.photoCellShort,
+                cell.offsetDown && styles.photoCellOffset,
+              ]}
+            >
+              <Image
+                source={{ uri: resolveAssetUrl(cell.photo.url) }}
+                style={styles.photoImage}
+              />
+              {(cell.photo.reactions?.heart ?? 0) > 0 && (
+                <View style={styles.reactionChip}>
+                  <Heart width={10} height={10} color={colors.white} fill={colors.white} />
+                  <Text style={styles.reactionCount}>{cell.photo.reactions.heart}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      );
+    },
+    [photos, navigation, album]
+  );
+
   if (!album) {
     return (
       <View style={[styles.root, styles.center]}>
@@ -222,7 +316,10 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
           />
 
         {/* Top controls */}
-        <View style={[styles.topControls, styles.topControlsSafe]} pointerEvents="box-none">
+        <View
+          style={[styles.topControls, { paddingTop: insets.top + 8 }]}
+          pointerEvents="box-none"
+        >
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => navigation.goBack()}
@@ -307,8 +404,8 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
         </Animated.View>
       </View>
 
-      {/* Timeline content — scrolls up under the collapsing hero */}
-      <Animated.ScrollView
+      {/* Timeline content — virtualized photo grid under the collapsing hero */}
+      <Animated.FlatList
         contentContainerStyle={styles.timelineContent}
         showsVerticalScrollIndicator={false}
         onScroll={Animated.event(
@@ -316,70 +413,27 @@ export default function AlbumDetailScreen({ route, navigation }: Props) {
           { useNativeDriver: true }
         )}
         scrollEventThrottle={16}
-      >
-        <View style={styles.sheetHandle} />
-
-        {loading ? (
-          <View style={styles.loadingWrap}>
-            <Spinner />
-          </View>
-        ) : (
-          <>
-            {photos.length === 0 ? (
-              <View style={styles.emptyWrap}>
-                <Text style={styles.emptyText}>
-                  {'Every memory starts with a single photo.\nTap the button below to add yours.'}
-                </Text>
-              </View>
-            ) : (
-              sections.map(([label, sectionPhotos]) => (
-                <View key={label} style={styles.section}>
-                  <View style={styles.sectionHeader}>
-                    <View style={styles.sectionBadge}>
-                      <Caption>{label}</Caption>
-                    </View>
-                  </View>
-
-                  <View style={styles.grid}>
-                    {sectionPhotos.map((photo, pIndex) => {
-                      const tall = pIndex % 3 === 0;
-                      const offsetDown = pIndex % 4 === 1;
-                      return (
-                        <TouchableOpacity
-                          key={photo.id}
-                          activeOpacity={0.92}
-                          onPress={() =>
-                            navigation.navigate('PhotoViewer', {
-                              photos,
-                              initialIndex: photos.indexOf(photo),
-                              albumOwnerId: album.ownerId,
-                            })
-                          }
-                          style={[
-                            styles.photoCell,
-                            tall ? styles.photoCellTall : styles.photoCellShort,
-                            offsetDown && styles.photoCellOffset,
-                          ]}
-                        >
-                          <Image source={{ uri: resolveAssetUrl(photo.url) }} style={styles.photoImage} />
-                          {(photo.reactions?.heart ?? 0) > 0 && (
-                            <View style={styles.reactionChip}>
-                              <Heart width={10} height={10} color={colors.white} fill={colors.white} />
-                              <Text style={styles.reactionCount}>
-                                {photo.reactions.heart}
-                              </Text>
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))
-            )}
-          </>
-        )}
-      </Animated.ScrollView>
+        data={gridItems}
+        keyExtractor={keyForGridItem}
+        renderItem={renderGridItem}
+        ListHeaderComponent={<View style={styles.sheetHandle} />}
+        ListEmptyComponent={
+          loading ? (
+            <View style={styles.loadingWrap}>
+              <Spinner />
+            </View>
+          ) : (
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyText}>
+                {'Every memory starts with a single photo.\nTap the button below to add yours.'}
+              </Text>
+            </View>
+          )
+        }
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={11}
+      />
 
       {/* Floating action buttons */}
       <View style={styles.fabColumn}>
@@ -428,7 +482,6 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
     pointerEvents: 'none',
   },
-  topControlsSafe: { paddingTop: 56 },
   topControls: {
     position: 'absolute',
     top: 0,
@@ -580,6 +633,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+  },
+  gridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  gridRowSectionEnd: {
+    // cell margin (16) + the old `.section` bottom margin (56) — faithful to
+    // the pre-virtualization layout.
+    marginBottom: 72,
   },
   photoCell: {
     width: '48%',

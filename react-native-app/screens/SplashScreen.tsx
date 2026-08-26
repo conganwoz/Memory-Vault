@@ -24,7 +24,7 @@ export default function SplashScreen() {
   useEffect(() => {
     Animated.timing(bgOpacity, {
       toValue: 0.65,
-      duration: 3500,
+      duration: 2000,
       useNativeDriver: true,
     }).start();
 

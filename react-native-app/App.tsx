@@ -62,7 +62,7 @@ function RootNavigator() {
   const [minSplashElapsed, setMinSplashElapsed] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setMinSplashElapsed(true), 2200);
+    const timer = setTimeout(() => setMinSplashElapsed(true), 1200);
     return () => clearTimeout(timer);
   }, []);
 

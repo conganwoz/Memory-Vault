@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import * as Google from 'expo-auth-session/providers/google';
 import Constants from 'expo-constants';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useFirebase } from '../lib/FirebaseProvider';
 import { colors } from '../lib/theme';
@@ -25,6 +26,7 @@ const IMG_2 =
 
 export default function LoginScreen() {
   const { signIn, signUp, signInGoogle } = useFirebase();
+  const insets = useSafeAreaInsets();
 
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
@@ -115,7 +117,7 @@ export default function LoginScreen() {
     >
       <ScrollView
         style={styles.flex}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
         keyboardShouldPersistTaps="handled"
       >
         {/* Stacked photo collage */}
@@ -289,7 +291,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     backgroundColor: colors.cream,
     paddingHorizontal: 32,
-    paddingTop: 72,
     paddingBottom: 40,
     alignItems: 'center',
   },

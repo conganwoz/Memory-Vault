@@ -22,6 +22,7 @@ import {
 } from 'lucide-react-native';
 import { format } from 'date-fns';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { RootStackParamList } from '../App';
 import { useFirebase } from '../lib/FirebaseProvider';
@@ -61,6 +62,7 @@ interface PickedCover {
 
 export default function CreateAlbumScreen({ navigation }: Props) {
   const { createAlbum } = useFirebase();
+  const insets = useSafeAreaInsets();
 
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(new Date());
@@ -123,7 +125,7 @@ export default function CreateAlbumScreen({ navigation }: Props) {
   return (
     <View style={styles.root}>
       {/* Header */}
-      <View style={[styles.header, styles.headerSafe]}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={() => navigation.goBack()}
@@ -259,7 +261,6 @@ export default function CreateAlbumScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.cream },
-  headerSafe: { paddingTop: 56 },
   header: {
     paddingHorizontal: 32,
     paddingBottom: 12,

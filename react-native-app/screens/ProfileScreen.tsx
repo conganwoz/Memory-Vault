@@ -33,6 +33,7 @@ import type { RootStackParamList } from '../App';
 import { useFirebase } from '../lib/FirebaseProvider';
 import { invitationsApi } from '../lib/api/endpoints';
 import { resolveAssetUrl } from '../lib/config';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius } from '../lib/theme';
 import { Avatar, Caption, FloatingNav } from '../lib/ui';
 import type { Invitation } from '../lib/types';
@@ -44,6 +45,7 @@ const ON_THIS_DAY_IMAGE =
 
 export default function ProfileScreen({ navigation }: Props) {
   const { user, albums, signOut, refreshAlbums } = useFirebase();
+  const insets = useSafeAreaInsets();
   const [pendingInvites, setPendingInvites] = useState<Invitation[]>([]);
 
   // Re-fetch albums + pending invitations whenever the profile gains focus.
@@ -135,7 +137,7 @@ export default function ProfileScreen({ navigation }: Props) {
   return (
     <View style={styles.root}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 8 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Profile card */}
@@ -349,7 +351,6 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.cream },
   scrollContent: {
     paddingHorizontal: 32,
-    paddingTop: 64,
     paddingBottom: 160,
   },
 

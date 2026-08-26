@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,15 @@ import {
   Alert,
   Linking,
   Animated,
+  PanResponder,
+  Platform,
   ScrollView,
 } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import {
+  CameraView,
+  useCameraPermissions,
+  type CameraRatio,
+} from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
 import {
   X,
@@ -20,6 +26,10 @@ import {
   Sparkles,
   CheckCircle2,
   Image as ImageIcon,
+  Grid3x3,
+  Timer,
+  Flashlight,
+  FlashlightOff,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -42,19 +52,62 @@ export default function CameraScreen({ route, navigation }: Props) {
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<'back' | 'front'>('back');
-  const [flash, setFlash] = useState<'on' | 'off'>('off');
+  const [flash, setFlash] = useState<'off' | 'on' | 'auto'>('off');
+  const [torch, setTorch] = useState(false);
+  const [grid, setGrid] = useState(false);
+  const [timer, setTimer] = useState<'off' | 3 | 10>('off');
+  const [ratio, setRatio] = useState<CameraRatio>('4:3');
+  const [zoom, setZoom] = useState(0);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [bursting, setBursting] = useState(false);
+  const [burstCount, setBurstCount] = useState(0);
   const [capturing, setCapturing] = useState(false);
   const [lastShotUri, setLastShotUri] = useState<string | null>(null);
   const [uploadQueue, setUploadQueue] = useState(0);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [filter, setFilter] = useState<PhotoFilter>(FILTERS[0]);
   const [processingFilterLabel, setProcessingFilterLabel] = useState<string | null>(null);
+
   // Serializes filter processing + uploads so heavy jpeg-js work never overlaps.
   const processingChain = useRef<Promise<void>>(Promise.resolve());
+  // Live zoom (kept in a ref so the pinch responder never reads a stale closure).
+  const zoomRef = useRef(0);
+  // Hold-to-burst machinery.
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const burstTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pressingRef = useRef(false);
+  const burstingRef = useRef(false);
+  const shotInFlightRef = useRef(false);
+  // Self-timer countdown machinery.
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Pinch-to-zoom tracking.
+  const pinchStartDistRef = useRef<number | null>(null);
+  const zoomAtPinchStartRef = useRef(0);
 
-  // Shutter + flash animations.
+  // Shutter + flash + countdown animations.
   const shutterScale = useRef(new Animated.Value(1)).current;
   const flashOpacity = useRef(new Animated.Value(0)).current;
+  const countdownPulse = useRef(new Animated.Value(0)).current;
+
+  // Pulse the self-timer number on every tick.
+  useEffect(() => {
+    if (countdown === null) return;
+    countdownPulse.setValue(0);
+    Animated.timing(countdownPulse, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [countdown, countdownPulse]);
+
+  // Clean up timers on unmount.
+  useEffect(() => {
+    return () => {
+      if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+      if (burstTimerRef.current) clearInterval(burstTimerRef.current);
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!showConfirmation) return;
@@ -62,9 +115,74 @@ export default function CameraScreen({ route, navigation }: Props) {
     return () => clearTimeout(timer);
   }, [showConfirmation]);
 
+  const setZoomSafe = (next: number) => {
+    const clamped = Math.min(1, Math.max(0, next));
+    zoomRef.current = clamped;
+    setZoom(clamped);
+  };
+
+  /** Zoom readout (1.0x → 4.0x across the device's supported range). */
+  const formatZoom = (z: number) => `${(1 + z * 3).toFixed(1)}x`;
+
+  // Two-finger pinch-to-zoom over the preview (single taps pass through).
+  const pinchResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, g) => g.numberActiveTouches === 2,
+        onPanResponderMove: (e) => {
+          const touches = e.nativeEvent.touches;
+          if (touches.length !== 2) return;
+          const dx = Math.abs((touches[0]?.pageX ?? 0) - (touches[1]?.pageX ?? 0));
+          const dy = Math.abs((touches[0]?.pageY ?? 0) - (touches[1]?.pageY ?? 0));
+          const dist = Math.max(dx, dy);
+          if (pinchStartDistRef.current == null) {
+            pinchStartDistRef.current = dist;
+            zoomAtPinchStartRef.current = zoomRef.current;
+          } else if (dist > 0) {
+            setZoomSafe(zoomAtPinchStartRef.current * (dist / pinchStartDistRef.current));
+          }
+        },
+        onPanResponderRelease: () => (pinchStartDistRef.current = null),
+        onPanResponderTerminate: () => (pinchStartDistRef.current = null),
+      }),
+    []
+  );
+
+  /** Captures a single frame (quiet = no shutter animation / capture lock). */
+  const takeShot = async (quiet = false) => {
+    if (!cameraRef.current || shotInFlightRef.current) return null;
+    shotInFlightRef.current = true;
+    if (!quiet) setCapturing(true);
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.55,
+        exif: false,
+        // NOTE: processing must NOT be skipped — skipProcessing returns the raw
+        // sensor frame without rotation, producing photos with the wrong
+        // orientation/dimensions (the tall-and-narrow aspect ratio bug).
+      });
+
+      if (photo?.uri) setLastShotUri(photo.uri);
+      setUploadQueue((q) => q + 1);
+
+      // Serialize processing + uploads (rapid captures queue up cleanly).
+      processingChain.current = processingChain.current
+        .then(() => uploadMemory(photo, filter))
+        .catch((error) => console.warn('Capture chain error:', error));
+      return photo?.uri ?? null;
+    } catch (error) {
+      console.error('Capture failed:', error);
+      return null;
+    } finally {
+      shotInFlightRef.current = false;
+      if (!quiet) setCapturing(false);
+    }
+  };
+
+  /** Single capture with shutter + flash feedback (used by the shutter button). */
   const capture = async () => {
-    if (!cameraRef.current || capturing) return;
-    setCapturing(true);
+    if (!cameraRef.current || capturing || countdown !== null) return;
 
     // Shutter press feedback.
     Animated.sequence([
@@ -89,26 +207,82 @@ export default function CameraScreen({ route, navigation }: Props) {
       useNativeDriver: true,
     }).start();
 
-    try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.55,
-        exif: false,
-        // NOTE: processing must NOT be skipped — skipProcessing returns the raw
-        // sensor frame without rotation, producing photos with the wrong
-        // orientation/dimensions (the tall-and-narrow aspect ratio bug).
-      });
+    await takeShot(false);
+  };
 
-      if (photo?.uri) setLastShotUri(photo.uri);
-      setUploadQueue((q) => q + 1);
+  /** Quiet burst frame — never locks, so frames overlap smoothly. */
+  const burstShot = async () => {
+    if (shotInFlightRef.current) return;
+    const uri = await takeShot(true);
+    if (uri) setBurstCount((c) => c + 1);
+  };
 
-      // Serialize processing + uploads (rapid captures queue up cleanly).
-      processingChain.current = processingChain.current
-        .then(() => uploadMemory(photo, filter))
-        .catch((error) => console.warn('Capture chain error:', error));
-    } catch (error) {
-      console.error('Capture failed:', error);
-    } finally {
-      setCapturing(false);
+  const startBurst = () => {
+    if (burstingRef.current) return;
+    burstingRef.current = true;
+    setBursting(true);
+    setBurstCount(0);
+    void burstShot();
+    burstTimerRef.current = setInterval(() => void burstShot(), 350);
+  };
+
+  const stopBurst = () => {
+    burstingRef.current = false;
+    setBursting(false);
+    if (burstTimerRef.current) {
+      clearInterval(burstTimerRef.current);
+      burstTimerRef.current = null;
+    }
+  };
+
+  // ----- Shutter press handlers (quick tap = shot, hold = burst) -----
+  const onShutterPressIn = () => {
+    if (capturing || countdown !== null) return;
+    pressingRef.current = true;
+    pressTimerRef.current = setTimeout(() => {
+      if (pressingRef.current) startBurst();
+    }, 350);
+  };
+
+  const onShutterPressOut = () => {
+    if (!pressingRef.current) return;
+    pressingRef.current = false;
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+    if (burstingRef.current) {
+      stopBurst();
+      return;
+    }
+    void fireShot();
+  };
+
+  /** Counts down the self-timer, then takes the shot (auto-disarms). */
+  const runCountdown = (seconds: number) => {
+    let remaining = seconds;
+    setCountdown(remaining);
+    countdownRef.current = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        if (countdownRef.current) clearInterval(countdownRef.current);
+        countdownRef.current = null;
+        setCountdown(null);
+        setTimer('off');
+        void capture();
+      } else {
+        setCountdown(remaining);
+      }
+    }, 1000);
+  };
+
+  /** Shutter press action: fires immediately, or arms the self-timer. */
+  const fireShot = () => {
+    if (!cameraRef.current || capturing || countdown !== null) return;
+    if (timer !== 'off') {
+      runCountdown(timer);
+    } else {
+      void capture();
     }
   };
 
@@ -194,10 +368,27 @@ export default function CameraScreen({ route, navigation }: Props) {
         facing={facing}
         flash={flash}
         mode="picture"
+        zoom={zoom}
+        enableTorch={torch}
+        mirror={facing === 'front'}
+        ratio={Platform.OS === 'android' ? ratio : undefined}
       />
       {/* Cinematic vignette */}
       <View style={styles.vignetteTop} pointerEvents="none" />
       <View style={styles.vignetteBottom} pointerEvents="none" />
+
+      {/* Pinch-to-zoom gesture layer (transparent — controls stay above) */}
+      <View style={StyleSheet.absoluteFillObject} {...pinchResponder.panHandlers} />
+
+      {/* Rule-of-thirds grid */}
+      {grid && (
+        <View style={[StyleSheet.absoluteFillObject, styles.gridOverlay]} pointerEvents="none">
+          <View style={[styles.gridLineV, { left: '33.333%' }]} />
+          <View style={[styles.gridLineV, { left: '66.666%' }]} />
+          <View style={[styles.gridLineH, { top: '33.333%' }]} />
+          <View style={[styles.gridLineH, { top: '66.666%' }]} />
+        </View>
+      )}
 
       {/* Top controls */}
       <View style={[styles.topControls, { paddingTop: insets.top + 10 }]}>
@@ -229,7 +420,57 @@ export default function CameraScreen({ route, navigation }: Props) {
         </TouchableOpacity>
       </View>
 
+      {/* Professional utility rail: grid / timer / torch / aspect */}
+      <View style={[styles.utilityRail, { top: insets.top + 88 }]}>
+        <UtilityButton
+          Icon={Grid3x3}
+          label="Grid"
+          active={grid}
+          onPress={() => setGrid((g) => !g)}
+        />
+        <UtilityButton
+          Icon={Timer}
+          label={timer === 10 ? '10s' : timer === 3 ? '3s' : 'Timer'}
+          active={timer !== 'off'}
+          onPress={() => setTimer((t) => (t === 'off' ? 3 : t === 3 ? 10 : 'off'))}
+        />
+        <UtilityButton
+          Icon={torch ? FlashlightOff : Flashlight}
+          label="Torch"
+          active={torch}
+          onPress={() => setTorch((t) => !t)}
+        />
+        {Platform.OS === 'android' && (
+          <UtilityButton
+            iconText={ratio}
+            label="Ratio"
+            active
+            onPress={() =>
+              setRatio((r) => (r === '4:3' ? '16:9' : r === '16:9' ? '1:1' : '4:3'))
+            }
+          />
+        )}
+      </View>
+
       <View style={{ flex: 1 }} />
+
+      {/* Zoom readout (tap to reset) + burst badge */}
+      <View style={styles.zoomRow}>
+        {zoom > 0 && (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => setZoomSafe(0)}
+            style={styles.zoomPill}
+          >
+            <Text style={styles.zoomPillText}>{formatZoom(zoom)}</Text>
+          </TouchableOpacity>
+        )}
+        {bursting && (
+          <View style={styles.burstBadge}>
+            <Text style={styles.burstBadgeText}>BURST · {burstCount}</Text>
+          </View>
+        )}
+      </View>
 
       {/* Artistic filter selector */}
       <View style={styles.filterWrap}>
@@ -291,8 +532,13 @@ export default function CameraScreen({ route, navigation }: Props) {
             )}
           </View>
 
-          {/* Shutter */}
-          <TouchableOpacity activeOpacity={0.9} onPress={capture}>
+          {/* Shutter — tap for a shot, hold for burst */}
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPressIn={onShutterPressIn}
+            onPressOut={onShutterPressOut}
+            disabled={capturing || countdown !== null}
+          >
             <Animated.View
               style={[
                 styles.shutterOuter,
@@ -307,13 +553,21 @@ export default function CameraScreen({ route, navigation }: Props) {
           <View style={{ gap: 16 }}>
             <TouchableOpacity
               activeOpacity={0.85}
-              onPress={() => setFlash((f) => (f === 'on' ? 'off' : 'on'))}
+              onPress={() => setFlash((f) => (f === 'off' ? 'on' : f === 'on' ? 'auto' : 'off'))}
               style={styles.glassRound}
             >
-              {flash === 'on' ? (
-                <Zap width={20} height={20} color={colors.peach} fill={colors.peach} />
-              ) : (
+              {flash === 'off' ? (
                 <ZapOff width={20} height={20} color={colors.white} />
+              ) : (
+                <View>
+                  <Zap
+                    width={20}
+                    height={20}
+                    color={colors.peach}
+                    fill={flash === 'on' ? colors.peach : 'transparent'}
+                  />
+                  {flash === 'auto' && <Text style={styles.flashAutoBadge}>A</Text>}
+                </View>
               )}
             </TouchableOpacity>
             <TouchableOpacity
@@ -331,12 +585,72 @@ export default function CameraScreen({ route, navigation }: Props) {
         <Text style={styles.bottomCaption}>Spontaneous Moment</Text>
       </View>
 
+      {/* Self-timer countdown */}
+      {countdown !== null && (
+        <View
+          style={[StyleSheet.absoluteFillObject, styles.countdownOverlay]}
+          pointerEvents="none"
+        >
+          <Animated.Text
+            style={[
+              styles.countdownText,
+              {
+                transform: [
+                  {
+                    scale: countdownPulse.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1.5, 1],
+                    }),
+                  },
+                ],
+                opacity: countdownPulse.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.4, 1],
+                }),
+              },
+            ]}
+          >
+            {countdown}
+          </Animated.Text>
+        </View>
+      )}
+
       {/* Capture flash overlay */}
       <Animated.View
         pointerEvents="none"
         style={[StyleSheet.absoluteFillObject, styles.flashOverlay, { opacity: flashOpacity }]}
       />
     </View>
+  );
+}
+
+/** Small round toggle used in the camera's professional utility rail. */
+function UtilityButton({
+  Icon,
+  iconText,
+  label,
+  active,
+  onPress,
+}: {
+  Icon?: React.ComponentType<{ width?: number; height?: number; color?: string }>;
+  iconText?: string;
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={onPress}
+      style={[styles.utilButton, active && styles.utilButtonActive]}
+    >
+      {Icon ? (
+        <Icon width={20} height={20} color={active ? colors.charcoal : colors.white} />
+      ) : iconText ? (
+        <Text style={[styles.utilIconText, active && styles.utilLabelActive]}>{iconText}</Text>
+      ) : null}
+      <Text style={[styles.utilLabel, active && styles.utilLabelActive]}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -358,6 +672,121 @@ const styles = StyleSheet.create({
     right: 0,
     height: 180,
     backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+
+  gridOverlay: {
+    zIndex: 2,
+  },
+  gridLineV: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  gridLineH: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+
+  utilityRail: {
+    position: 'absolute',
+    right: 16,
+    gap: 12,
+    zIndex: 4,
+  },
+  utilButton: {
+    width: 52,
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 9,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  utilButtonActive: {
+    backgroundColor: colors.peach,
+    borderColor: colors.peach,
+  },
+  utilIconText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  utilLabel: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  utilLabelActive: {
+    color: colors.charcoal,
+  },
+
+  zoomRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    paddingBottom: 18,
+    zIndex: 3,
+  },
+  zoomPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  zoomPillText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  burstBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.peach,
+  },
+  burstBadgeText: {
+    color: colors.charcoal,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+
+  countdownOverlay: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    zIndex: 20,
+  },
+  countdownText: {
+    color: colors.white,
+    fontSize: 120,
+    fontWeight: '800',
+  },
+
+  flashAutoBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    fontSize: 9,
+    fontWeight: '900',
+    color: colors.peach,
+    backgroundColor: colors.charcoal,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    overflow: 'hidden',
   },
 
   topControls: {

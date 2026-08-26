@@ -16,7 +16,8 @@ interface FirebaseContextType {
   loading: boolean;
   albums: Album[];
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (name: string, email: string, password: string) => Promise<void>;
+  /** Creates an unverified account and emails a link. Returns the message. */
+  signUp: (name: string, email: string, password: string) => Promise<string>;
   signInGoogle: (idToken: string) => Promise<void>;
   signOut: () => Promise<void>;
   createAlbum: (albumData: Partial<Album>) => Promise<string>;
@@ -94,8 +95,10 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
       },
 
       async signUp(name, email, password) {
-        const { token, user: currentUser } = await authApi.signUp(name, email, password);
-        await applySession(token, currentUser);
+        // Email verification: the account is created unverified and a
+        // confirmation link is emailed — no session is started here.
+        const { message } = await authApi.signUp(name, email, password);
+        return message;
       },
 
       async signInGoogle(idToken) {

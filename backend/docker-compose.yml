@@ -43,6 +43,11 @@ services:
       CORS_ORIGIN: "${CORS_ORIGIN:-*}"
       UPLOADS_DIR: /app/priv/static/uploads
       SEED_ON_START: ${SEED_ON_START:-false}
+      # Email verification
+      APP_URL: ${APP_URL:-}
+      MAILER_PROVIDER: ${MAILER_PROVIDER:-}
+      MAILER_FROM: ${MAILER_FROM:-}
+      MAILER_API_KEY: ${MAILER_API_KEY:-}
     ports:
       - "${PORT:-4008}:4008"
     volumes:

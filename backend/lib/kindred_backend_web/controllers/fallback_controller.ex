@@ -17,6 +17,23 @@ defmodule KindredWeb.FallbackController do
     |> json(%{errors: %{detail: "Incorrect email or password."}})
   end
 
+  def call(conn, {:error, :email_not_verified}) do
+    conn
+    |> put_status(:forbidden)
+    |> json(%{
+      errors: %{
+        detail:
+          "Please verify your email before signing in. Check your inbox for the confirmation link."
+      }
+    })
+  end
+
+  def call(conn, {:error, :already_verified}) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{errors: %{detail: "This email is already verified."}})
+  end
+
   def call(conn, {:error, :unauthorized}) do
     conn
     |> put_status(:unauthorized)

@@ -13,10 +13,13 @@ import {
 } from 'react-native';
 import * as Google from 'expo-auth-session/providers/google';
 import Constants from 'expo-constants';
+import { MailOpen } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useFirebase } from '../lib/FirebaseProvider';
-import { colors } from '../lib/theme';
+import { authApi } from '../lib/api/endpoints';
+import { ApiError } from '../lib/api/client';
+import { colors, radius } from '../lib/theme';
 import { PrimaryButton } from '../lib/ui';
 
 const IMG_1 =
@@ -33,6 +36,9 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  // Set once an account needs email confirmation — shows the verify panel.
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [verifyNotice, setVerifyNotice] = useState<string | null>(null);
 
   // Google sign-in via expo-auth-session (requires OAuth client IDs in app.json).
   const googleConfig = Constants.expoConfig?.extra as
@@ -95,19 +101,47 @@ export default function LoginScreen() {
 
     setBusy(true);
     try {
-      if (mode === 'signin') {
-        await signIn(email, password);
+      if (mode === 'signup') {
+        // Account created but unverified — email the confirmation link.
+        const message = await signUp(name, email.trim().toLowerCase(), password);
+        setPendingEmail(email.trim().toLowerCase());
+        setVerifyNotice(message);
       } else {
-        await signUp(name, email, password);
+        await signIn(email, password);
+        // Navigation happens automatically once auth state updates.
       }
-      // Navigation happens automatically once auth state updates.
     } catch (error) {
-      Alert.alert(
-        mode === 'signin' ? 'Sign-in failed' : 'Account creation failed',
-        error instanceof Error ? error.message : 'Please try again.'
-      );
+      if (error instanceof ApiError && error.status === 403) {
+        // The account exists but hasn't been verified yet.
+        setPendingEmail(email.trim().toLowerCase());
+        setVerifyNotice(error.message);
+      } else {
+        Alert.alert(
+          mode === 'signin' ? 'Sign-in failed' : 'Account creation failed',
+          error instanceof Error ? error.message : 'Please try again.'
+        );
+      }
       setBusy(false);
     }
+  };
+
+  const handleResend = async () => {
+    if (!pendingEmail) return;
+    try {
+      const { message } = await authApi.resendVerification(pendingEmail);
+      setVerifyNotice(message);
+    } catch (error) {
+      Alert.alert(
+        'Could not resend',
+        error instanceof Error ? error.message : 'Please try again.'
+      );
+    }
+  };
+
+  const closeVerifyPanel = () => {
+    setPendingEmail(null);
+    setVerifyNotice(null);
+    setMode('signin');
   };
 
   return (
@@ -130,9 +164,30 @@ export default function LoginScreen() {
           </View>
         </View>
 
-        <Text style={styles.title}>
-          {mode === 'signin' ? 'Welcome Home' : 'Join Kindred'}
-        </Text>
+        {pendingEmail ? (
+          <View style={styles.verifyPanel}>
+            <View style={styles.verifyIconWrap}>
+              <MailOpen width={30} height={30} color={colors.white} />
+            </View>
+            <Text style={styles.verifyTitle}>Check your inbox</Text>
+            <Text style={styles.verifyBody}>
+              {verifyNotice ??
+                `We sent a verification link to ${pendingEmail}. Tap it to activate your account, then sign in.`}
+            </Text>
+            <PrimaryButton label="Resend email" onPress={handleResend} />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={closeVerifyPanel}
+              style={styles.verifyBackButton}
+            >
+              <Text style={styles.verifyBackText}>Go to sign in</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <Text style={styles.title}>
+              {mode === 'signin' ? 'Welcome Home' : 'Join Kindred'}
+            </Text>
         <Text style={styles.subtitle}>
           Invite your loved ones and start building your shared story, one frame
           at a time.
@@ -217,10 +272,12 @@ export default function LoginScreen() {
           </TouchableOpacity>
         )}
 
-        <Text style={styles.legal}>
-          By continuing, you agree to our terms. We promise to keep your memories
-          private and safe.
-        </Text>
+          <Text style={styles.legal}>
+            By continuing, you agree to our terms. We promise to keep your
+            memories private and safe.
+          </Text>
+          </>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -367,6 +424,45 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.peach,
+  },
+  verifyPanel: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingTop: 12,
+  },
+  verifyIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.pill,
+    backgroundColor: colors.peach,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  verifyTitle: {
+    fontSize: 24,
+    fontStyle: 'italic',
+    fontWeight: '600',
+    color: colors.charcoal,
+    marginBottom: 12,
+  },
+  verifyBody: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.muted,
+    textAlign: 'center',
+    marginBottom: 26,
+    maxWidth: 320,
+  },
+  verifyBackButton: {
+    marginTop: 18,
+    paddingVertical: 6,
+  },
+  verifyBackText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.muted,
+    textDecorationLine: 'underline',
   },
   dividerRow: {
     flexDirection: 'row',

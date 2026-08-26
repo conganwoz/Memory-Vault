@@ -13,6 +13,7 @@ defmodule KindredWeb.Router do
   # Container health check (public, no DB auth required — DB state is reported).
   scope "/", KindredWeb do
     get "/healthz", HealthController, :index
+    get "/verify-email", AuthController, :verify_email
   end
 
   scope "/api", KindredWeb do
@@ -24,6 +25,7 @@ defmodule KindredWeb.Router do
     # --- Public endpoints ---
     post "/auth/signup", AuthController, :signup
     post "/auth/signin", AuthController, :signin
+    post "/auth/resend-verification", AuthController, :resend_verification
     post "/auth/google", AuthController, :google
     get "/invites/:code", InviteController, :show
 

@@ -15,8 +15,13 @@ export const authApi = {
   signIn: (email: string, password: string) =>
     post<{ token: string; user: User }>('/auth/signin', { email, password }),
 
+  /** Creates an *unverified* account and emails a confirmation link (no token). */
   signUp: (name: string, email: string, password: string) =>
-    post<{ token: string; user: User }>('/auth/signup', { name, email, password }),
+    post<{ message: string }>('/auth/signup', { name, email, password }),
+
+  /** Sends a fresh verification link for an unverified account. */
+  resendVerification: (email: string) =>
+    post<{ message: string }>('/auth/resend-verification', { email }),
 
   google: (idToken: string) =>
     post<{ token: string; user: User }>('/auth/google', { idToken }),

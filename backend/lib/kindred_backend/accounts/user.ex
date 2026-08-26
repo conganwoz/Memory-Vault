@@ -18,6 +18,9 @@ defmodule Kindred.Accounts.User do
     field :photo_url, :string
     field :password_hash, :string
     field :google_uid, :string
+    field :email_verified_at, :utc_datetime
+    field :email_verification_token_hash, :string
+    field :email_verification_expires_at, :utc_datetime
 
     field :password, :string, virtual: true
     field :password_confirmation, :string, virtual: true
@@ -51,7 +54,7 @@ defmodule Kindred.Accounts.User do
   @doc false
   def google_changeset(user, attrs) do
     user
-    |> cast(attrs, [:email, :display_name, :photo_url, :google_uid])
+    |> cast(attrs, [:email, :display_name, :photo_url, :google_uid, :email_verified_at])
     |> validate_required([:email, :display_name, :google_uid])
     |> unique_constraint(:google_uid)
     |> unique_constraint(:email)

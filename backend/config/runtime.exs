@@ -23,6 +23,17 @@ end
 config :kindred_backend, KindredWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4008"))]
 
+# Base URL used in verification emails (override with APP_URL in prod).
+config :kindred_backend,
+       :verification_base_url,
+       System.get_env("APP_URL", "http://localhost:#{System.get_env("PORT", "4008")}")
+
+# Transactional email delivery (Resend). Leave unset to log emails instead.
+config :kindred_backend, Kindred.Mailer,
+  provider: System.get_env("MAILER_PROVIDER", ""),
+  from: System.get_env("MAILER_FROM", ""),
+  api_key: System.get_env("MAILER_API_KEY", "")
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

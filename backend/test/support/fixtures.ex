@@ -6,7 +6,7 @@ defmodule Kindred.Fixtures do
   alias Kindred.Auth
   alias Kindred.Repo
 
-  @doc "Creates a unique user (unique email each call)."
+  @doc "Creates a unique user (unique email each call). Users are email-verified."
   def user(attrs \\ %{}) do
     n = System.unique_integer([:positive])
 
@@ -22,6 +22,7 @@ defmodule Kindred.Fixtures do
       )
 
     {:ok, user} = Accounts.register_user(attrs)
+    {:ok, user} = Accounts.mark_email_verified(user)
     user
   end
 

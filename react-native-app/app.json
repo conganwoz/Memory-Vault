@@ -6,6 +6,12 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "scheme": "kindred",
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/REPLACE_WITH_EAS_PROJECT_ID",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "splash": {
       "backgroundColor": "#2D2D2D",
       "resizeMode": "contain"
@@ -29,6 +35,7 @@
       ]
     },
     "plugins": [
+      "expo-updates",
       [
         "expo-camera",
         {
@@ -48,7 +55,10 @@
       "googleIosClientId": "",
       "googleAndroidClientId": "",
       "apiBaseUrl": "",
-      "apiPort": 4008
+      "apiPort": 4008,
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
     }
   }
 }

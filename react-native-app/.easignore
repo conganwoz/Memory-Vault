@@ -1,0 +1,10 @@
+# Files/dirs excluded from EAS build & update uploads
+.git/
+.gitignore
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+.env
+.env.*

@@ -43,19 +43,27 @@ defmodule KindredWeb.PhotoController do
     user = Pipeline.current_resource(conn)
 
     with %Albums.Album{} = album <- Albums.get_album(album_id),
-         true <- Albums.member?(album, user.id),
-         {:ok, url} <- resolve_image_url(params, album_id) do
-      attrs = %{
-        url: url,
-        caption: params["caption"],
-        type: params["type"] || "photo",
-        timestamp_label: params["timestampLabel"] || params["timestamp_label"] || "Moments"
-      }
+         true <- Albums.member?(album, user.id) do
+      plan = Kindred.Plans.plan_for(user)
+      limits = Kindred.Plans.limits(plan)
 
-      with {:ok, photo} <- Albums.create_photo(album, user, attrs) do
-        conn
-        |> put_status(:created)
-        |> json(%{photo: Albums.photo_to_map(photo)})
+      if album.photo_count >= limits.max_photos_per_album do
+        {:error, :plan_photo_limit}
+      else
+        with {:ok, url} <- resolve_image_url(params, album_id) do
+          attrs = %{
+            url: url,
+            caption: params["caption"],
+            type: params["type"] || "photo",
+            timestamp_label: params["timestampLabel"] || params["timestamp_label"] || "Moments"
+          }
+
+          with {:ok, photo} <- Albums.create_photo(album, user, attrs) do
+            conn
+            |> put_status(:created)
+            |> json(%{photo: Albums.photo_to_map(photo)})
+          end
+        end
       end
     else
       nil -> {:error, :not_found}

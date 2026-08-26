@@ -3,7 +3,19 @@ export interface User {
   displayName: string;
   email: string;
   photoURL?: string;
+  plan?: PlanId;
+  planExpiresAt?: string;
   createdAt: string;
+}
+
+export type PlanId = 'default' | 'basic' | 'pro';
+export type PlanPeriod = 'monthly' | 'yearly';
+
+export interface PlanInfo {
+  plan: PlanId;
+  expiresAt?: string | null;
+  limits: { maxAlbums: number; maxPhotosPerAlbum: number };
+  usage: { albums: number };
 }
 
 export interface Album {

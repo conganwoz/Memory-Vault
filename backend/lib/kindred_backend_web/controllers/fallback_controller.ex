@@ -88,6 +88,32 @@ defmodule KindredWeb.FallbackController do
     |> json(%{errors: %{detail: "This invitation is no longer pending."}})
   end
 
+  def call(conn, {:error, :plan_album_limit}) do
+    conn
+    |> put_status(:forbidden)
+    |> json(%{
+      errors: %{
+        detail: "You've reached the album limit for your plan. Upgrade to create more vaults."
+      }
+    })
+  end
+
+  def call(conn, {:error, :plan_photo_limit}) do
+    conn
+    |> put_status(:forbidden)
+    |> json(%{
+      errors: %{
+        detail: "This vault has reached its photo limit for your plan. Upgrade to add more."
+      }
+    })
+  end
+
+  def call(conn, {:error, :invalid_plan}) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{errors: %{detail: "Unsupported plan."}})
+  end
+
   def call(conn, {:error, :invalid_credentials_or_album}) do
     call(conn, {:error, :invalid_credentials})
   end

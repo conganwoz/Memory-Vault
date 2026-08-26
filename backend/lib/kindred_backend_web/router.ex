@@ -35,6 +35,8 @@ defmodule KindredWeb.Router do
     # Profile
     get "/me", UserController, :show
     put "/me", UserController, :update
+    get "/me/plan", PlanController, :show
+    post "/me/plan", PlanController, :apply
 
     # Albums
     get "/albums", AlbumController, :index

@@ -24,6 +24,15 @@ defmodule Kindred.Albums do
     |> Repo.all()
   end
 
+  @doc "Counts the albums a user belongs to (used for subscription limits)."
+  def count_user_albums(user_id) do
+    Album
+    |> join(:inner, [a], m in AlbumMember, on: m.album_id == a.id)
+    |> where([a, m], m.user_id == ^user_id)
+    |> select([a], count(a.id))
+    |> Repo.one()
+  end
+
   @doc "Fetches an album (with members preloaded), or nil."
   def get_album(id) when is_binary(id) do
     case Repo.get(Album, id) do

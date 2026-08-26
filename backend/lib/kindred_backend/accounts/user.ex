@@ -21,6 +21,8 @@ defmodule Kindred.Accounts.User do
     field :email_verified_at, :utc_datetime
     field :email_verification_token_hash, :string
     field :email_verification_expires_at, :utc_datetime
+    field :plan, :string, default: "default"
+    field :plan_expires_at, :utc_datetime
 
     field :password, :string, virtual: true
     field :password_confirmation, :string, virtual: true

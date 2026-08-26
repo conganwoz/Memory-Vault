@@ -181,6 +181,8 @@ defmodule Kindred.Accounts do
       "displayName" => user.display_name,
       "email" => user.email,
       "photoURL" => user.photo_url,
+      "plan" => user.plan || "default",
+      "planExpiresAt" => user.plan_expires_at,
       "createdAt" => user.inserted_at
     }
   end

@@ -17,6 +17,7 @@ import InviteScreen from './screens/InviteScreen';
 import PhotoViewerScreen from './screens/PhotoViewerScreen';
 import RecentlyDeletedScreen from './screens/RecentlyDeletedScreen';
 import InvitationsScreen from './screens/InvitationsScreen';
+import PlansScreen from './screens/PlansScreen';
 import UploadScreen from './screens/UploadScreen';
 import RecapScreen from './screens/RecapScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -31,6 +32,7 @@ export type RootStackParamList = {
   AlbumDetail: { albumId: string };
   Invite: { albumId: string };
   Invitations: undefined;
+  Plans: undefined;
   PhotoViewer: {
     photos: Photo[];
     initialIndex: number;
@@ -92,6 +94,7 @@ function RootNavigator() {
           <Stack.Screen name="AlbumDetail" component={AlbumDetailScreen} />
           <Stack.Screen name="Invite" component={InviteScreen} />
           <Stack.Screen name="Invitations" component={InvitationsScreen} />
+          <Stack.Screen name="Plans" component={PlansScreen} />
           <Stack.Screen
             name="PhotoViewer"
             component={PhotoViewerScreen}

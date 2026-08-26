@@ -5,7 +5,7 @@
  * `User` / `Album` / `Photo` / `Recap` types in `lib/types.ts`.
  */
 import { get, post, put, del, apiFormData } from './client';
-import type { Album, Invitation, Photo, Recap, User } from '../types';
+import type { Album, Invitation, Photo, PlanInfo, Recap, User } from '../types';
 
 // ---------------------------------------------------------------------------
 // Auth
@@ -36,6 +36,13 @@ export const meApi = {
 
   update: async (attrs: { displayName?: string; photoURL?: string; password?: string }) =>
     (await put<{ user: User }>('/me', attrs)).user,
+
+  /** The caller's subscription plan, limits and usage. */
+  plan: async () => (await get<{ plan: PlanInfo }>('/me/plan')).plan,
+
+  /** Applies a purchased plan. */
+  applyPlan: async (plan: 'basic' | 'pro', days?: number) =>
+    (await post<{ plan: PlanInfo }>('/me/plan', { plan, days })).plan,
 };
 
 // ---------------------------------------------------------------------------

@@ -43,10 +43,17 @@ defmodule KindredWeb.AlbumController do
       owner_id: user.id
     }
 
-    with {:ok, album} <- Albums.create_album(attrs) do
+    plan = Kindred.Plans.plan_for(user)
+    limits = Kindred.Plans.limits(plan)
+
+    with true <- Albums.count_user_albums(user.id) < limits.max_albums,
+         {:ok, album} <- Albums.create_album(attrs) do
       conn
       |> put_status(:created)
       |> json(%{album: Albums.to_map(album)})
+    else
+      false -> {:error, :plan_album_limit}
+      {:error, changeset} -> {:error, changeset}
     end
   end
 

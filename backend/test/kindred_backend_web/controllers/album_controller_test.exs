@@ -61,6 +61,27 @@ defmodule KindredWeb.AlbumControllerTest do
       conn = post(conn, "/api/albums", %{})
       assert %{"errors" => %{"title" => _}} = json_response(conn, 422)
     end
+
+    test "enforces the plan album limit (default = 2)", %{conn: conn} do
+      user = Fixtures.user()
+      {:ok, _one} = Kindred.Albums.create_album(%{title: "One", owner_id: user.id})
+      {:ok, _two} = Kindred.Albums.create_album(%{title: "Two", owner_id: user.id})
+      conn = Fixtures.auth_conn(conn, user)
+
+      conn = post(conn, "/api/albums", %{title: "Three"})
+      assert %{"errors" => %{"detail" => detail}} = json_response(conn, 403)
+      assert detail =~ "album limit"
+
+      # Upgrading unlocks more albums.
+      {:ok, _} = Kindred.Plans.set_plan(user, "basic", 30)
+
+      conn =
+        build_conn()
+        |> Fixtures.auth_conn(user)
+        |> post("/api/albums", %{title: "Three"})
+
+      assert %{"album" => %{"title" => "Three"}} = json_response(conn, 201)
+    end
   end
 
   describe "album access control" do

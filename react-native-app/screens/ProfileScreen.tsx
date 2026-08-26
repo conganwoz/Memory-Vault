@@ -24,6 +24,7 @@ import {
   Layers,
   Sparkles,
   Mail,
+  Crown,
 } from 'lucide-react-native';
 import { format } from 'date-fns';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -95,6 +96,11 @@ export default function ProfileScreen({ navigation }: Props) {
       Icon: Mail,
       badge: pendingInvites.length,
       onPress: () => navigation.navigate('Invitations'),
+    },
+    {
+      label: 'Subscription',
+      Icon: Crown,
+      onPress: () => navigation.navigate('Plans'),
     },
     {
       label: 'Privacy & Security',

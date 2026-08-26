@@ -74,6 +74,34 @@ defmodule KindredWeb.PhotoControllerTest do
       conn = conn |> Fixtures.auth_conn(owner) |> post("/api/albums/#{album.id}/photos", %{})
       assert %{"errors" => _} = json_response(conn, 400)
     end
+
+    test "enforces the plan photo limit per album (default = 10)", %{
+      conn: conn,
+      owner: owner,
+      album: album
+    } do
+      for _ <- 1..10 do
+        {:ok, _} = Kindred.Albums.create_photo(album, owner, %{url: "/uploads/a.jpg"})
+      end
+
+      conn =
+        conn
+        |> Fixtures.auth_conn(owner)
+        |> post("/api/albums/#{album.id}/photos", %{base64: @tiny_png_base64})
+
+      assert %{"errors" => %{"detail" => detail}} = json_response(conn, 403)
+      assert detail =~ "photo limit"
+
+      # Upgrading unlocks more photos.
+      {:ok, _} = Kindred.Plans.set_plan(owner, "pro", 30)
+
+      conn =
+        build_conn()
+        |> Fixtures.auth_conn(owner)
+        |> post("/api/albums/#{album.id}/photos", %{base64: @tiny_png_base64})
+
+      assert %{"photo" => _} = json_response(conn, 201)
+    end
   end
 
   describe "GET /api/albums/:id/photos" do

@@ -43,6 +43,78 @@ Scan the QR code with Expo Go (Android) or the Camera app (iOS).
 npm run typecheck
 ```
 
+## Over-the-air (OTA) updates
+
+The app ships with [expo-updates](https://docs.expo.dev/versions/latest/sdk/updates/),
+so **JS/TS-only changes can reach devices without an App Store / Play review.**
+
+- **OTA applies to:** everything bundled into the JS bundle — screens, components,
+  `lib/`, styling, logic.
+- **Needs a new native build (`eas build`):** adding a native module or config
+  plugin (e.g. `react-native-iap`, `expo-camera`), changing `app.json` native
+  settings (permissions, bundle id, plugins), or upgrading the Expo SDK.
+- **Not supported in Expo Go** — OTA works on dev-client and store builds only.
+
+### One-time setup (do this once per machine / fresh checkout)
+
+```bash
+cd react-native-app
+npx eas-cli login
+npx eas-cli update:configure   # creates the EAS project, writes extra.eas.projectId
+                               # and updates.url into app.json
+npx eas-cli build --platform ios --profile production   # first native build (and android)
+```
+
+### Daily flow — ship a JS-only change
+
+1. Commit and push as usual:
+
+   ```bash
+   git add -A && git commit -m "fix: photo grid performance" && git push
+   ```
+
+2. Publish an OTA update to the **production** channel:
+
+   ```bash
+   cd react-native-app
+   npx eas-cli update --channel production --message "fix: photo grid performance"
+   ```
+
+   Or reuse the last git commit message automatically:
+
+   ```bash
+   npx eas-cli update --channel production --auto
+   ```
+
+3. Done. Devices running a **production**-channel build download the new bundle
+   in the background at launch and run it on their **next cold start** — no store
+   review, no user action.
+
+### Useful options
+
+| Command | What it does |
+| --- | --- |
+| `eas update --channel production --auto` | Uses the last git commit message as the update message |
+| `eas update --channel production --message "..."` | Explicit message (shown on the EAS dashboard) |
+| `eas update --channel production --target-platform ios` | Limit the update to one platform |
+| `eas update --channel production --branch main` | Tie updates to a branch (default: current branch) |
+| `eas update:list` / `eas update:view` | List / inspect published updates |
+| EAS dashboard → Updates → ⋯ → Rollback | Roll back devices to a previous update |
+
+### Channels & builds
+
+Each `eas.json` build profile maps to a channel. OTA updates only reach builds
+whose channel matches the `--channel` you publish to:
+
+| Profile | Channel | Use |
+| --- | --- | --- |
+| `production` | `production` | Store builds (TestFlight / Play internal → store) |
+| `preview` | `preview` | Internal testing builds (dev client / ad-hoc) |
+| `development` | — | Dev client; no OTA |
+
+> **Gotcha:** publishing to `preview` will **not** reach devices running a
+> `production` build (and vice versa). Match `--channel` to the build's profile.
+
 ## API configuration (dev on LAN / prod)
 
 The API base URL is resolved in `lib/config.ts` with this priority:

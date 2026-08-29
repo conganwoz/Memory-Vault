@@ -1,12 +1,12 @@
 # Kindred Backend
 
 Elixir/Phoenix API server for **Kindred — Shared Memory Vault** (the companion to
-`react-native-app/`). It handles everything the app previously did via Firebase:
+`mobile/`). It handles everything the app previously did via Firebase:
 authentication, albums, photo uploads, reactions, invites, and AI memory recaps.
 
 ```
 backend/                  ← this project (Phoenix 1.8, Ecto, Postgres)
-react-native-app/         ← the Expo mobile app
+mobile/                   ← the Expo mobile app
 ```
 
 ## Stack
@@ -210,7 +210,7 @@ invites        id, album_id, code (unique), created_by, expires_at, uses
 
 ## Wiring the mobile app
 
-Point `react-native-app` at this API by replacing the Firebase calls in
+Point `mobile/` at this API by replacing the Firebase calls in
 `lib/firebase.ts` / `lib/FirebaseProvider.tsx` with HTTP calls, e.g.:
 
 ```

@@ -30,7 +30,7 @@ and the backend running (see `../backend/README.md` — `docker compose up` or
 `mix phx.server`).
 
 ```bash
-cd react-native-app
+cd mobile
 npm install
 npx expo start
 ```
@@ -58,7 +58,7 @@ so **JS/TS-only changes can reach devices without an App Store / Play review.**
 ### One-time setup (do this once per machine / fresh checkout)
 
 ```bash
-cd react-native-app
+cd mobile
 npx eas-cli login
 npx eas-cli update:configure   # creates the EAS project, writes extra.eas.projectId
                                # and updates.url into app.json
@@ -76,7 +76,7 @@ npx eas-cli build --platform ios --profile production   # first native build (an
 2. Publish an OTA update to the **production** channel:
 
    ```bash
-   cd react-native-app
+   cd mobile
    npx eas-cli update --channel production --message "fix: photo grid performance"
    ```
 
@@ -196,7 +196,7 @@ only if the backend is unreachable.
 ## Project layout
 
 ```
-react-native-app/
+mobile/
 ├── App.tsx                  # Navigation container + auth-gated stack
 ├── index.ts                 # Expo entry point
 ├── app.json                 # Expo config (permissions, plugins, extra: apiBaseUrl/apiPort)

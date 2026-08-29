@@ -135,7 +135,7 @@ export default function ProfileScreen({ navigation }: Props) {
       onPress: () =>
         Alert.alert(
           'Help & Support',
-          'For help with Kindred, check the READMEs in react-native-app/ and backend/, or open an issue on the project repository.'
+          'For help with Kindred, check the READMEs in mobile/ and backend/, or open an issue on the project repository.'
         ),
     },
   ];

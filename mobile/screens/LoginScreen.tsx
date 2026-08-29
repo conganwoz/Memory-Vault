@@ -83,7 +83,7 @@ export default function LoginScreen() {
           : 'an Android client ID (googleAndroidClientId)';
     Alert.alert(
       'Google sign-in not fully configured',
-      `This project still needs ${missing}.\n\nCreate OAuth client IDs in Google Cloud Console, add them to app.json under expo.extra, add the same IDs to the backend's GOOGLE_CLIENT_IDS, then restart the dev server.\n\nFull steps: react-native-app/README.md`
+      `This project still needs ${missing}.\n\nCreate OAuth client IDs in Google Cloud Console, add them to app.json under expo.extra, add the same IDs to the backend's GOOGLE_CLIENT_IDS, then restart the dev server.\n\nFull steps: mobile/README.md`
     );
   };
 

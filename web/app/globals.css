@@ -1,0 +1,189 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-cream: #fdfbf7;
+  --color-charcoal: #2d2d2d;
+  --color-peach: #e89e82;
+  --color-beige: #f1ece1;
+  --color-muted: #8c8c8c;
+  --color-glow: #ffe3d3;
+  --color-danger: #ef4444;
+  --color-success: #34d399;
+}
+
+:root {
+  --font-serif: var(--font-playfair), Georgia, 'Times New Roman', serif;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-charcoal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: var(--color-peach);
+  color: var(--color-cream);
+}
+
+/* ---------------------------------- UI kit ---------------------------------- */
+
+.font-display {
+  font-family: var(--font-serif);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 16px;
+  padding: 17px 24px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+  cursor: pointer;
+  border: none;
+  user-select: none;
+}
+.btn:active {
+  transform: scale(0.98);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-dark {
+  background: var(--color-charcoal);
+  color: var(--color-cream);
+}
+.btn-white {
+  background: var(--color-cream);
+  color: var(--color-charcoal);
+}
+.btn-danger {
+  background: #fee2e2;
+  color: var(--color-danger);
+}
+
+.input {
+  width: 100%;
+  background: var(--color-cream);
+  border: none;
+  border-radius: 16px;
+  padding: 16px 20px;
+  font-size: 15px;
+  color: var(--color-charcoal);
+  outline: none;
+}
+.input::placeholder {
+  color: var(--color-muted);
+}
+.input:focus {
+  box-shadow: 0 0 0 2px var(--color-peach);
+}
+
+.caption {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.glass {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: var(--color-cream);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.glass:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+.glass-light {
+  background: var(--color-cream);
+  border: none;
+  color: var(--color-charcoal);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06);
+}
+.glass-light:hover {
+  background: var(--color-white);
+}
+
+/* ---------------------------------- animations ---------------------------------- */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes float-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease both;
+}
+.animate-float-up {
+  animation: float-up 0.5s ease both;
+}
+.animate-pop-in {
+  animation: pop-in 0.3s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001s !important;
+    transition-duration: 0.001s !important;
+  }
+}
+
+/* Hide scrollbars on horizontal rails while keeping scrollability */
+.rail-scroll {
+  scrollbar-width: none;
+}
+.rail-scroll::-webkit-scrollbar {
+  display: none;
+}
